@@ -17,23 +17,23 @@ void print_float(float f, int num_digits);
 
 
 byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress server(192,168,1,100);
-
+IPAddress serverIp(192,168,1,100);
+//char serverName[] = "192.168.1.100";
+char serverName[] = "fortressweather.appspot.com";
 
 void setup(void)
 {
-   Serial.begin(9600);
-   Wire.begin();
-   pinMode(4, OUTPUT);
-   digitalWrite(4, HIGH); // this turns on the HIH3610
-   
-  
+  Serial.begin(9600);
+  Wire.begin();
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH); // this turns on the HIH3610
+
   if (Ethernet.begin(mac) == 0) {
     Serial.println("Failed to configure Ethernet using DHCP");
   }
    
-   delay(1000);
-   Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>");  // just to be sure things are working
+  delay(1000);
+  Serial.println(">>>>>>>>>>>>>>>>>>>>>>>>");  // just to be sure things are working
 }
     
 void loop(void)
@@ -76,7 +76,9 @@ void loop(void)
 bool uploadData(float T_F, float RH) {
   EthernetClient client;
 
-  if (!client.connect(server, 8000)) {
+//  if (!client.connect(serverIp, 8000)) {
+  if (!client.connect(serverName, 80)) {
+//  if (!client.connect(serverName, 8000)) {
     Serial.println("connection failed");
     return false;
   }
@@ -94,6 +96,8 @@ bool uploadData(float T_F, float RH) {
     char c = client.read();
     Serial.print(c);
   }
+  
+  Serial.println("handled response");
 
   client.stop();   
 }
