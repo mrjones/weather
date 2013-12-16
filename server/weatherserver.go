@@ -24,7 +24,8 @@ func handleDashboard(resp http.ResponseWriter, req *http.Request) {
 	q := datastore.NewQuery("reading").Order("Timestamp");
 	result := q.Run(ctx)
 
-	table := ""
+	temps := ""
+	humid := ""
 
 	for {
 		var reading Reading
@@ -38,8 +39,9 @@ func handleDashboard(resp http.ResponseWriter, req *http.Request) {
 			ctx.Errorf("Error fetching readings")
 			break
 		}
-
-		table = fmt.Sprintf("%s table.addRow([new Date(%d), %f]);", table, reading.Timestamp.Unix() * 1000, reading.TemperatureF)
+ 
+		temps = fmt.Sprintf("%s temps.addRow([new Date(%d), %f]);", temps, reading.Timestamp.Unix() * 1000, reading.TemperatureF)
+		humid = fmt.Sprintf("%s humid.addRow([new Date(%d), %f]);", humid, reading.Timestamp.Unix() * 1000, reading.RelativeHumidity)
 	}
 
 	fmt.Fprintf(resp,
@@ -50,19 +52,27 @@ func handleDashboard(resp http.ResponseWriter, req *http.Request) {
 		"   google.load('visualization', '1.0', {'packages':['corechart']});" +
 		"   google.setOnLoadCallback(drawChart);" +
 		"   function drawChart() {" +
-		"    var table = new google.visualization.DataTable();" +
-		"    table.addColumn('datetime', 'Time');" +
-		"    table.addColumn('number', 'Temperature'); " +
-		table +
+		"    var temps = new google.visualization.DataTable();" +
+		"    temps.addColumn('datetime', 'Time');" +
+		"    temps.addColumn('number', 'Temperature'); " +
+		temps +
+		"    var humid = new google.visualization.DataTable();" +
+		"    humid.addColumn('datetime', 'Time');" +
+		"    humid.addColumn('number', 'Humidity'); " +
+		humid +
 		"    var options;" +
-		"    var chart = new google.visualization.LineChart(" +
-		"      document.getElementById('chart_div'));"+
-		"    chart.draw(table, options);" +
+		"    var temps_chart = new google.visualization.LineChart(" +
+		"      document.getElementById('temps_div'));"+
+		"    var humid_chart = new google.visualization.LineChart(" +
+		"      document.getElementById('humid_div'));"+
+		"    temps_chart.draw(temps, options);" +
+		"    humid_chart.draw(humid, options);" +
 		"   }" +
 		"  </script>" +
 		" <head>" +
 		" <body>" +
-		"  <div id='chart_div'></div>" +
+		"  <div id='temps_div'></div>" +
+		"  <div id='humid_div'></div>" +
 		" </body>" +
 		"</html>");
 }
