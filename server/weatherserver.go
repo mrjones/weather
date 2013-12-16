@@ -3,6 +3,7 @@ package weatherserver
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,10 +16,61 @@ func init() {
 	http.HandleFunc("/upload", handleUpload)
 	http.HandleFunc("/latest", handleLatest)
 	http.HandleFunc("/statusz", handleStatus)
-	http.HandleFunc("/", handleStatus)
+	http.HandleFunc("/", handleDashboard)
+}
+
+func handleDashboard(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
+	q := datastore.NewQuery("reading").Order("Timestamp");
+	result := q.Run(ctx)
+
+	table := ""
+
+	for {
+		var reading Reading
+		_, err := result.Next(&reading)
+
+		if err == datastore.Done {
+			break
+		}
+
+		if err != nil {
+			ctx.Errorf("Error fetching readings")
+			break
+		}
+
+		table = fmt.Sprintf("%s table.addRow([new Date(%d), %f]);", table, reading.Timestamp.Unix() * 1000, reading.TemperatureF)
+	}
+
+	fmt.Fprintf(resp,
+		"<html>" +
+		" <head>" +
+		"  <script type='text/javascript' src='https://www.google.com/jsapi'></script>" +
+		"  <script type='text/javascript'>" +
+		"   google.load('visualization', '1.0', {'packages':['corechart']});" +
+		"   google.setOnLoadCallback(drawChart);" +
+		"   function drawChart() {" +
+		"    var table = new google.visualization.DataTable();" +
+		"    table.addColumn('datetime', 'Time');" +
+		"    table.addColumn('number', 'Temperature'); " +
+		table +
+		"    var options;" +
+		"    var chart = new google.visualization.LineChart(" +
+		"      document.getElementById('chart_div'));"+
+		"    chart.draw(table, options);" +
+		"   }" +
+		"  </script>" +
+		" <head>" +
+		" <body>" +
+		"  <div id='chart_div'></div>" +
+		" </body>" +
+		"</html>");
 }
 
 func handleStatus(resp http.ResponseWriter, req *http.Request) {
+	for k,vs := range(req.Header) {
+		log.Printf("%s=%vs\n", k, vs)
+	}
 	fmt.Fprintf(resp, "weatherserver ok")
 }
 
