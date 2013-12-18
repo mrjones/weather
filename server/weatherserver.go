@@ -21,7 +21,7 @@ func init() {
 
 func handleDashboard(resp http.ResponseWriter, req *http.Request) {
 	ctx := appengine.NewContext(req)
-	q := datastore.NewQuery("reading").Order("Timestamp");
+	q := datastore.NewQuery("reading").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-24 * time.Hour))
 	result := q.Run(ctx)
 
 	temps := ""
@@ -49,6 +49,7 @@ func handleDashboard(resp http.ResponseWriter, req *http.Request) {
 		" <head>" +
 		"  <script type='text/javascript' src='https://www.google.com/jsapi'></script>" +
 		"  <script type='text/javascript'>" +
+//		"   setTimeout('location.reload(true);', 5 * 60 * 1000);"+
 		"   google.load('visualization', '1.0', {'packages':['corechart']});" +
 		"   google.setOnLoadCallback(drawChart);" +
 		"   function drawChart() {" +
