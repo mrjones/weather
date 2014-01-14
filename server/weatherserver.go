@@ -3,6 +3,7 @@ package weatherserver
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,10 +16,72 @@ func init() {
 	http.HandleFunc("/upload", handleUpload)
 	http.HandleFunc("/latest", handleLatest)
 	http.HandleFunc("/statusz", handleStatus)
-	http.HandleFunc("/", handleStatus)
+	http.HandleFunc("/", handleDashboard)
+}
+
+func handleDashboard(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
+	q := datastore.NewQuery("reading").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-24 * time.Hour))
+	result := q.Run(ctx)
+
+	temps := ""
+	humid := ""
+
+	for {
+		var reading Reading
+		_, err := result.Next(&reading)
+
+		if err == datastore.Done {
+			break
+		}
+
+		if err != nil {
+			ctx.Errorf("Error fetching readings")
+			break
+		}
+ 
+		temps = fmt.Sprintf("%s temps.addRow([new Date(%d), %f]);", temps, reading.Timestamp.Unix() * 1000, reading.TemperatureF)
+		humid = fmt.Sprintf("%s humid.addRow([new Date(%d), %f]);", humid, reading.Timestamp.Unix() * 1000, reading.RelativeHumidity)
+	}
+
+	fmt.Fprintf(resp,
+		"<html>" +
+		" <head>" +
+		"  <script type='text/javascript' src='https://www.google.com/jsapi'></script>" +
+		"  <script type='text/javascript'>" +
+//		"   setTimeout('location.reload(true);', 5 * 60 * 1000);"+
+		"   google.load('visualization', '1.0', {'packages':['corechart']});" +
+		"   google.setOnLoadCallback(drawChart);" +
+		"   function drawChart() {" +
+		"    var temps = new google.visualization.DataTable();" +
+		"    temps.addColumn('datetime', 'Time');" +
+		"    temps.addColumn('number', 'Temperature'); " +
+		temps +
+		"    var humid = new google.visualization.DataTable();" +
+		"    humid.addColumn('datetime', 'Time');" +
+		"    humid.addColumn('number', 'Humidity'); " +
+		humid +
+		"    var options;" +
+		"    var temps_chart = new google.visualization.LineChart(" +
+		"      document.getElementById('temps_div'));"+
+		"    var humid_chart = new google.visualization.LineChart(" +
+		"      document.getElementById('humid_div'));"+
+		"    temps_chart.draw(temps, options);" +
+		"    humid_chart.draw(humid, options);" +
+		"   }" +
+		"  </script>" +
+		" <head>" +
+		" <body>" +
+		"  <div id='temps_div'></div>" +
+		"  <div id='humid_div'></div>" +
+		" </body>" +
+		"</html>");
 }
 
 func handleStatus(resp http.ResponseWriter, req *http.Request) {
+	for k,vs := range(req.Header) {
+		log.Printf("%s=%vs\n", k, vs)
+	}
 	fmt.Fprintf(resp, "weatherserver ok")
 }
 
