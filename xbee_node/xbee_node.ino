@@ -1,20 +1,21 @@
 // Wiring:
 // 
 // [1] Temperature Sensor
-// Configure SCA & SCL according to: http://arduino.cc/en/reference/wire
-// VDD -> Digital 4
-const int VDD_PIN = 4;
+// Wire SCA & SCL according to: http://arduino.cc/en/reference/wire
+// VDD -> 5V
 // GND -> Ground
 //
 // [2] XBee
-// TX  -> Digital 9
-// RX  -> Digital 8
+// For RX and TX, pick any pins, subject to the limitations at:
+// http://arduino.cc/en/Reference/SoftwareSerial
+const int XBEE_RX_PIN = 9;  // connected to TX on the XBee
+const int XBEE_TX_PIN = 8;  // connected to RX on the XBee
 // +5  -> 5V
 // GND -> Ground
-//
-//
 
 #include <Wire.h>
+#include <SoftwareSerial.h>
+
 
 const int NONE = 0;
 const int SOME = 1;
@@ -22,16 +23,19 @@ const int ALL  = 2;
 
 const int debug = SOME;
 
+SoftwareSerial xbee = SoftwareSerial(XBEE_RX_PIN, XBEE_TX_PIN);
+
 void setup() {
   Serial.begin(9600);
+  xbee.begin(9600);
   Wire.begin();
   
-  // TODO(mrjones): could we just hook this up to 5V?
-  pinMode(VDD_PIN, OUTPUT);
-  digitalWrite(VDD_PIN, HIGH);
-  
-  // TODO(mrjones): setup xbee
+  xbee.listen();
+
+  // TODO(mrjones): pick a more thought-out time? 
   delay(5000);
+  
+  xbeeSetup();
 }
 
 void loop() {
@@ -154,3 +158,122 @@ boolean fetchData(float* relHumidity, float* tempF) {
 // =====================================
 // XBee Functions
 // =====================================
+
+void xbeeSend(String s) {
+  if (debug >= SOME) {
+    Serial.print("Sending '");
+    Serial.print(s);
+    Serial.println("'");
+  }
+  xbee.print(s);
+}
+
+void xbeeWaitForData() {
+  int deadline_msec = 5 * 1000;
+  
+  while (deadline_msec > 0 && !xbee.available()) {
+    delay(100);
+    deadline_msec -= 100;
+  } 
+}
+
+bool xbeeIsOk() {
+  xbeeWaitForData();
+ 
+  if (!xbee.available()) {
+    if (debug >= SOME) {
+      Serial.println("no data available");
+    }
+    return false;
+  }
+  
+  // TODO(mrjones): tidy up
+  char c;
+  c = (char)xbee.read();
+  if (c != 'O') {
+    if (debug >= SOME) {
+      Serial.print("Instead of 'O' got: ");
+      Serial.println(c);
+    }
+    return false; 
+  }
+  
+  c = (char)xbee.read();
+  if (c != 'K') {
+    if (debug >= SOME) {
+      Serial.print("Instead of 'K' got: ");
+      Serial.println(c);
+    }
+    return false; 
+  }
+  
+  c = (char)xbee.read();
+  if (c != '\r') {
+    if (debug >= SOME) {
+      Serial.print("Instead of '\r' got: ");
+      Serial.println(c);
+    }
+    return false; 
+  }
+  
+  if (xbee.available()) {
+    if (debug >= SOME) {
+      Serial.println("still available");
+    }
+    return false;
+  }
+  
+  if (debug >= ALL) {
+    Serial.println("OK");
+  }
+  return true;
+}
+
+bool enterCommandMode() {
+  delay(1200);
+  xbeeSend("+++");
+  
+  return xbeeIsOk();
+}
+
+bool xbeeSetup() {
+  if (!enterCommandMode()) {
+    return false;  
+  }
+  
+  xbeeSend("ATID1983\r");
+  if (!xbeeIsOk()) {
+     return false; 
+  }
+  
+  xbeeSend("ATMY1234\r");
+  if (!xbeeIsOk()) {
+    return false; 
+  }
+  
+  xbeeSend("ATDL5678\r");
+  if (!xbeeIsOk()) {
+    return false; 
+  }
+  
+  xbeeSend("ATDH0\r");
+  if (!xbeeIsOk()) {
+    return false; 
+  }
+  
+  xbeeSend("ATWR\r");
+  if (!xbeeIsOk()) {
+    return false; 
+  }
+
+  xbeeSend("ATCN\r");
+  if (!xbeeIsOk()) {
+    return false; 
+  }
+  
+  if (debug >= SOME) {
+    Serial.println("Atid is set");
+  }
+  return true;
+}
+
