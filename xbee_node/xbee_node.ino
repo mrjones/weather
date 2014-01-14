@@ -45,13 +45,15 @@ void loop() {
   
   if (hasData) {
     Serial.print("Humidity: ");
-    Serial.println(relHumidity);
+    Serial.println((int)relHumidity);
     Serial.print("Temperature: ");
-    Serial.println(tempF);
-    // TODO(mrjones): transmit data
+    Serial.println((int)tempF);
+    
+    xbeeSendInt((int)relHumidity);
+    xbeeSendInt((int)tempF);
   }
   
-  delay(1000);
+  delay(10 * 1000);
 }
 
 // =====================================
@@ -159,6 +161,15 @@ boolean fetchData(float* relHumidity, float* tempF) {
 // XBee Functions
 // =====================================
 
+void xbeeSendInt(int i) {
+  if (debug >= SOME) {
+    Serial.print("Sending '");
+    Serial.print(i);
+    Serial.println("'");
+  }
+  xbee.print(i);
+}
+
 void xbeeSend(String s) {
   if (debug >= SOME) {
     Serial.print("Sending '");
@@ -246,12 +257,12 @@ bool xbeeSetup() {
      return false; 
   }
   
-  xbeeSend("ATMY1234\r");
+  xbeeSend("ATMY5678\r");
   if (!xbeeIsOk()) {
     return false; 
   }
   
-  xbeeSend("ATDL5678\r");
+  xbeeSend("ATDL1234\r");
   if (!xbeeIsOk()) {
     return false; 
   }
