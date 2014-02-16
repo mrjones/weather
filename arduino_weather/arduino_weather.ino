@@ -19,7 +19,9 @@ void print_float(float f, int num_digits);
 byte mac[] = {  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress serverIp(192,168,1,100);
 //char serverName[] = "192.168.1.100";
+//int port = 8000;
 char serverName[] = "fortressweather.appspot.com";
+int port = 80;
 
 void setup(void)
 {
@@ -68,16 +70,18 @@ void loop(void)
       Serial.println();
       
       uploadData(T_F, RH);
-      
-      delay(1000);
-   }
+ 
+      Serial.print("delaying...");     
+      delay(60000);
+      Serial.print("Waking up");
+    }
 }
 
 bool uploadData(float T_F, float RH) {
   EthernetClient client;
 
 //  if (!client.connect(serverIp, 8000)) {
-  if (!client.connect(serverName, 80)) {
+  if (!client.connect(serverName, port)) {
 //  if (!client.connect(serverName, 8000)) {
     Serial.println("connection failed");
     return false;
@@ -88,6 +92,11 @@ bool uploadData(float T_F, float RH) {
   client.print("&r_h=");
   client.print(RH);
   client.println(" HTTP/1.0");
+  
+  client.print("Host: ");
+  client.println(serverName);
+  
+  client.println("User-Agent: arduino weatherbot");
   client.println();
   
   Serial.println("sent data");
