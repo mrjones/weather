@@ -257,12 +257,12 @@ bool xbeeSetup() {
      return false; 
   }
   
-  xbeeSend("ATMY5678\r");
+  xbeeSend("ATMY2222\r");
   if (!xbeeIsOk()) {
     return false; 
   }
   
-  xbeeSend("ATDL1234\r");
+  xbeeSend("ATDL1111\r");
   if (!xbeeIsOk()) {
     return false; 
   }
