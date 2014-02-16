@@ -35,3 +35,20 @@ Needs to contain:
 Needs to be simple to generate (generated on tiny microcontrollers), implementable from scratch with no libraries (i.e. no Protos).
 
 
+Push vs. pull
+-------------
+Currently thinking it should be push for both (i.e. sensors push to midtiers, and midtiers can push to hub/storage).
+
+Pros:
+
+- Allows sensor nodes to sleep if they want
+- Midtiers don't have to keep state of connected sensors
+
+Cons:
+
+- If midtiers don't know about sensors: they can't do health checking (same goes for storage nodes health checking the midtiers).
+
+
+Discovery
+---------
+If sensor pushes to midtier, we need to teach sensors to discover midtiers.  Maybe midtiers just live on a "well known" PAN and address?
