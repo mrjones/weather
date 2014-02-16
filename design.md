@@ -47,7 +47,9 @@ Strawman proposal:
 Strawman protocol:
 
 MAP(string fullyQualifiedMetricName) -> int32 metricId
+
 REPORT(string fullyQualifiedMetricName, int64 value, int64 timestamp)
+
 REPORT(int32 metricId, int64 value, int64 timestamp)
 
 Questions:
