@@ -176,14 +176,6 @@ func main() {
 		log.Fatal(err);
 	}
 
-	inSync := false
-	buf := make([]byte, 128)
-	bytesLeft := -1
-	data := make([]byte, 65535)
-	dataPtr := 0
-	bufPtr := 0
-	localChecksum := 0
-	length := 0
 
 	accum := NewAccum();
 
@@ -192,65 +184,30 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		err = accum.Consume(buf, 0, n)
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		for accum.MessagesAvailable() > 0 {
+			data := accum.Pop()
 			fmt.Printf("Popped: ")
-			printHexArray(accum.Pop())
+			printHexArray(data)
 			fmt.Println("")
-		}
 
-
-		log.Printf("read %d bytes: %q\n", n, buf[:n])
-
-		code := buf[0];
-		if inSync {
-			bufPtr = 0
-		} else {
-			if code == FRAME_DELIMITER && n >= 3 {
-				inSync = true
-				length = (int(buf[1]) << 8) + int(buf[2]);
-				log.Printf("Code: 0x%x %d\n", buf[0], code);
-				log.Printf("Length: 0x%x%x %d\n", buf[1], buf[2], length);
-				bytesLeft = length + CHECKSUM_LENGTH
-				dataPtr = 0
-				bufPtr = 3
-				localChecksum = 0
-			}
-		}
-
-		if inSync {
-			for ; bufPtr < n && bytesLeft > CHECKSUM_LENGTH; bufPtr++ {
-				log.Printf("Copying: 0x%x %d of %d (%d)\n", buf[bufPtr], bufPtr, n, bytesLeft)
-				data[dataPtr] = buf[bufPtr]
-				bytesLeft--
-				dataPtr++
-				localChecksum += int(buf[bufPtr])
-			}
-			if bytesLeft == CHECKSUM_LENGTH {
-				log.Printf("Checksum: 0x%x %d of %d\n", buf[bufPtr], bufPtr, n)
-				localChecksum += int(buf[bufPtr])
-				inSync = false
-				log.Printf("Checksum verified: 0x%x\n", (localChecksum & 0xFF))
-
-				log.Printf("Received message of type: 0x%x\n", data[0])
-				if (data[0] == RX_PACKET_16BIT) {
-					senderAddr := (int(data[1]) << 8) + int(data[2])
-					strength := int(data[3])
-						log.Printf("RSSI: -%d dBm\n", strength)
-					log.Printf("Received message from: 0x%x%x %d\n", data[1], data[2], senderAddr)
-					payloadLength := length - 4
-					fmt.Printf("Payload: 0x")
-					for i := 0; i < payloadLength; i++ {
-						fmt.Printf("%d ", data[i + 4])
-					}
-					fmt.Println("")
+			if (data[0] == RX_PACKET_16BIT) {
+				senderAddr := (int(data[1]) << 8) + int(data[2])
+				strength := int(data[3])
+				log.Printf("RSSI: -%d dBm\n", strength)
+				log.Printf("Received message from: 0x%x%x %d\n", data[1], data[2], senderAddr)
+				payloadLength := len(data) - 4
+				fmt.Printf("Payload: 0x")
+				for i := 0; i < payloadLength; i++ {
+					fmt.Printf("%d ", data[i + 4])
 				}
+				fmt.Println("")
 			}
-		} else {
-			log.Printf("ignoring message. not in sync")
 		}
 	}
 }
