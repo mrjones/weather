@@ -2,6 +2,7 @@
 package main
 
 import (
+	"container/list"
 	"fmt"
   "log"
 	"os"
@@ -31,12 +32,24 @@ type Accum struct {
 	payloadLength int
 	payload []byte
 	checksum int
+
+	messages *list.List
 }
 
 func NewAccum() *Accum {
-	a := &Accum{}
+	a := &Accum{messages: list.New()}
 	a.reset()
 	return a
+}
+
+func (a *Accum) MessagesAvailable() (int) {
+	return a.messages.Len()
+}
+
+func (a *Accum) Pop() ([]byte) {
+	e := a.messages.Front();
+	a.messages.Remove(e)
+	return e.Value.([]byte)
 }
 
 func (a* Accum) Consume(data []byte, offset int, len int) error {
@@ -107,8 +120,7 @@ func (a* Accum) VerifyChecksum(data []byte, offset int, len int) (int, error) {
 
 	if v == 0xFF {
 		fmt.Printf("Consumed message: ")
-		printHexArray(a.payload)
-		fmt.Println("")
+		a.messages.PushBack(a.payload)
 		a.reset()
 	} else {
 		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
@@ -184,6 +196,13 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		for accum.MessagesAvailable() > 0 {
+			fmt.Printf("Popped: ")
+			printHexArray(accum.Pop())
+			fmt.Println("")
+		}
+
+
 		log.Printf("read %d bytes: %q\n", n, buf[:n])
 
 		code := buf[0];
