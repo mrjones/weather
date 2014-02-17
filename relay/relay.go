@@ -62,13 +62,13 @@ func (a* Accum) Consume(data []byte, offset int, len int) error {
 		n := 0
 		switch a.state {
 		case STATE_OUT_OF_SYNC:
-			n, err = a.GetSync(data, offset, len)
+			n, err = a.getSync(data, offset, len)
 		case STATE_FOUND_FRAME_DELIMITER:
-			n, err = a.ParseLength(data, offset, len)
+			n, err = a.parseLength(data, offset, len)
 		case STATE_PARSED_LENGTH:
-			n, err = a.ConsumePayload(data, offset, len)
+			n, err = a.copyPayload(data, offset, len)
 		case STATE_CONSUMED_PAYLOAD:
-			n, err = a.VerifyChecksum(data, offset, len)
+			n, err = a.verifyChecksum(data, offset, len)
 		default:
 			return fmt.Errorf("Internal Error. Unknown state: %d", a.state)
 		}
@@ -108,7 +108,7 @@ func arrayAsHex(a []byte) (string) {
 	return s
 }
 
-func (a* Accum) VerifyChecksum(data []byte, offset int, len int) (int, error) {
+func (a* Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	a.checksum = int(data[offset])
 
 	v := 0;
@@ -128,7 +128,7 @@ func (a* Accum) VerifyChecksum(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-func (a* Accum) ConsumePayload(data []byte, offset int, len int) (int, error) {
+func (a* Accum) copyPayload(data []byte, offset int, len int) (int, error) {
 	if a.bytesConsumedInState == 0 {
 		a.payload = make([]byte, a.payloadLength)
 	}
@@ -148,7 +148,7 @@ func (a* Accum) ConsumePayload(data []byte, offset int, len int) (int, error) {
 	return consumed, nil
 }
 
-func (a* Accum) ParseLength(data []byte, offset int, len int) (int, error) {
+func (a* Accum) parseLength(data []byte, offset int, len int) (int, error) {
 	a.payloadLength = (a.payloadLength << 8) + int(data[offset])
 	a.bytesConsumedInState++
 
@@ -159,7 +159,7 @@ func (a* Accum) ParseLength(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-func (a* Accum) GetSync(data []byte, offset int, len int) (int, error) {
+func (a* Accum) getSync(data []byte, offset int, len int) (int, error) {
 	if data[offset] == FRAME_DELIMITER {
 		a.transition(STATE_FOUND_FRAME_DELIMITER)
 	}
