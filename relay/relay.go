@@ -1,3 +1,4 @@
+// ftp://ftp1.digi.com/support/documentation/90000982_A.pdf
 // stty -F /dev/ttyAMA0 9600 crtscts
 package main
 
@@ -172,19 +173,37 @@ func (a* Accum) getSync(data []byte, offset int, len int) (int, error) {
 func main() {
 	serialPort := "/dev/ttyAMA0"
 
-	file, err := os.Open(serialPort)
+	file, err := os.OpenFile(serialPort, os.O_RDWR, 0666)
 	if err != nil {
 		log.Fatal(err);
 	}
 
 	log.Printf("Opened '%s'\n", serialPort)
 
+	// [ 0x7E, 0x00, 0x04, 0x08, 0x52, 0x44, 0x4C, 0x15 ]
+	writePl := make([]byte, 8)
+	writePl[0] = 0x7E
+	writePl[1] = 0x00
+	writePl[2] = 0x04
+	writePl[3] = 0x08
+	writePl[4] = 0x52
+	writePl[5] = 0x44
+	writePl[6] = 0x4C
+	writePl[7] = 0x15
+
 
 	buf := make([]byte, 128)
 	accum := NewAccum()
+	wn, err :=file.Write(writePl)
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Printf("Write %d bytes\n", wn)
+	}
 
 	for {
 		n, err := file.Read(buf)
+		log.Printf("Read %d bytes\n", n)
 		if err != nil {
 			log.Fatal(err)
 		}
