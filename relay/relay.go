@@ -177,6 +177,7 @@ func main() {
 	}
 
 
+	buf := make([]byte, 128)
 	accum := NewAccum();
 
 	for {
