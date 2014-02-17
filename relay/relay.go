@@ -44,17 +44,34 @@ func (a* Accum) Consume(data []byte, offset int, len int) error {
 		return nil
 	}
 
-	switch a.state {
-	case STATE_OUT_OF_SYNC:
-		return a.GetSync(data, offset, len)
-	case STATE_FOUND_FRAME_DELIMITER:
-		return a.ParseLength(data, offset, len)
-	case STATE_PARSED_LENGTH:
-		return a.ConsumePayload(data, offset, len)
-	case STATE_CONSUMED_PAYLOAD:
-		return a.VerifyChecksum(data, offset, len)
-	default:
-		return fmt.Errorf("Internal Error. Unknown state: %d", a.state)
+	for {
+		var err error
+		n := 0
+		switch a.state {
+		case STATE_OUT_OF_SYNC:
+			n, err = a.GetSync(data, offset, len)
+		case STATE_FOUND_FRAME_DELIMITER:
+			n, err = a.ParseLength(data, offset, len)
+		case STATE_PARSED_LENGTH:
+			n, err = a.ConsumePayload(data, offset, len)
+		case STATE_CONSUMED_PAYLOAD:
+			n, err = a.VerifyChecksum(data, offset, len)
+		default:
+			return fmt.Errorf("Internal Error. Unknown state: %d", a.state)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		offset += n
+
+		if offset == len {
+			return nil
+		} else if offset > len {
+			return fmt.Errorf("Internal Error. Buffer overrun (%d > %d)",
+				offset, len)
+		}
 	}
 }
 
@@ -78,7 +95,7 @@ func printHexArray(a []byte) {
 	fmt.Printf("]")
 }
 
-func (a* Accum) VerifyChecksum(data []byte, offset int, len int) error {
+func (a* Accum) VerifyChecksum(data []byte, offset int, len int) (int, error) {
 	a.checksum = int(data[offset])
 
 	v := 0;
@@ -94,45 +111,49 @@ func (a* Accum) VerifyChecksum(data []byte, offset int, len int) error {
 		fmt.Println("")
 		a.reset()
 	} else {
-		return fmt.Errorf("Invalid checksum: 0x%x", v)
+		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
 	}
 
-	return nil
+	return 1, nil
 }
 
-func (a* Accum) ConsumePayload(data []byte, offset int, len int) error {
+func (a* Accum) ConsumePayload(data []byte, offset int, len int) (int, error) {
 	if a.bytesConsumedInState == 0 {
 		a.payload = make([]byte, a.payloadLength)
 	}
 
+	consumed := 0
 	for ; offset < len && a.bytesConsumedInState < a.payloadLength; {
 		a.payload[a.bytesConsumedInState] = data[offset]
 		offset++
 		a.bytesConsumedInState++
+		consumed++
 	}
 
 	if a.bytesConsumedInState == a.payloadLength {
 		a.transition(STATE_CONSUMED_PAYLOAD)
 	}
 
-	return a.Consume(data, offset, len)
+	return consumed, nil
 }
 
-func (a* Accum) ParseLength(data []byte, offset int, len int) error {
+func (a* Accum) ParseLength(data []byte, offset int, len int) (int, error) {
 	a.payloadLength = (a.payloadLength << 8) + int(data[offset])
 	a.bytesConsumedInState++
 
 	if a.bytesConsumedInState == LENGTH_BYTES {
 		a.transition(STATE_PARSED_LENGTH)
 	}
-	return a.Consume(data, offset + 1, len)
+
+	return 1, nil
 }
 
-func (a* Accum) GetSync(data []byte, offset int, len int) error {
+func (a* Accum) GetSync(data []byte, offset int, len int) (int, error) {
 	if data[offset] == FRAME_DELIMITER {
 		a.transition(STATE_FOUND_FRAME_DELIMITER)
 	}
-	return a.Consume(data, offset + 1, len)
+
+	return 1, nil
 }
 
 
