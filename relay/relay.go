@@ -90,7 +90,6 @@ func (a* Accum) Consume(data []byte, offset int, len int) error {
 
 func (a* Accum) transition(state int) {
 	a.state = state
-	fmt.Printf("IN STATE %d\n", a.state)
 	a.bytesConsumedInState = 0
 }
 
@@ -100,12 +99,13 @@ func (a* Accum) reset() {
 	a.transition(STATE_OUT_OF_SYNC)
 }
 
-func printHexArray(a []byte) {
-	fmt.Printf("[ ")
+func arrayAsHex(a []byte) (string) {
+	s := "[ "
 	for i := 0; i < len(a); i++ {
-		fmt.Printf("0x%x ", a[i])
+		s += fmt.Sprintf("0x%x ", a[i])
 	}
-	fmt.Printf("]")
+	s += "]"
+	return s
 }
 
 func (a* Accum) VerifyChecksum(data []byte, offset int, len int) (int, error) {
@@ -119,7 +119,6 @@ func (a* Accum) VerifyChecksum(data []byte, offset int, len int) (int, error) {
 	v = (v + a.checksum) & 0xFF
 
 	if v == 0xFF {
-		fmt.Printf("Consumed message: ")
 		a.messages.PushBack(a.payload)
 		a.reset()
 	} else {
@@ -171,10 +170,14 @@ func (a* Accum) GetSync(data []byte, offset int, len int) (int, error) {
 
 
 func main() {
-	file, err := os.Open("/dev/ttyAMA0")
+	serialPort := "/dev/ttyAMA0"
+
+	file, err := os.Open(serialPort)
 	if err != nil {
 		log.Fatal(err);
 	}
+
+	log.Printf("Opened '%s'\n", serialPort)
 
 
 	buf := make([]byte, 128)
@@ -193,21 +196,20 @@ func main() {
 
 		for accum.MessagesAvailable() > 0 {
 			data := accum.Pop()
-			fmt.Printf("Popped: ")
-			printHexArray(data)
-			fmt.Println("")
+//			fmt.Printf("Popped: %s\n", arrayAsHex(data))
 
 			if (data[0] == RX_PACKET_16BIT) {
 				senderAddr := (int(data[1]) << 8) + int(data[2])
 				strength := int(data[3])
-				log.Printf("RSSI: -%d dBm\n", strength)
-				log.Printf("Received message from: 0x%x%x %x\n", data[1], data[2], senderAddr)
+				log.Printf("RSSI:    -%d dBm\n", strength)
+				log.Printf("Sender:  0x%x\n",senderAddr)
 				payloadLength := len(data) - 4
-				fmt.Printf("Payload: 0x")
-				for i := 0; i < payloadLength; i++ {
-					fmt.Printf("%d ", data[i + 4])
+				var payload = make([]byte, payloadLength)
+				for i := 0 ; i < payloadLength; i++ {
+					payload[i] = data[i + 4]
 				}
-				fmt.Println("")
+
+				log.Printf("Payload: %s\n", arrayAsHex(payload))
 			}
 		}
 	}
