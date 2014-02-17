@@ -178,7 +178,7 @@ func main() {
 
 
 	buf := make([]byte, 128)
-	accum := NewAccum();
+	accum := NewAccum()
 
 	for {
 		n, err := file.Read(buf)
@@ -201,7 +201,7 @@ func main() {
 				senderAddr := (int(data[1]) << 8) + int(data[2])
 				strength := int(data[3])
 				log.Printf("RSSI: -%d dBm\n", strength)
-				log.Printf("Received message from: 0x%x%x %d\n", data[1], data[2], senderAddr)
+				log.Printf("Received message from: 0x%x%x %x\n", data[1], data[2], senderAddr)
 				payloadLength := len(data) - 4
 				fmt.Printf("Payload: 0x")
 				for i := 0; i < payloadLength; i++ {
