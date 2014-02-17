@@ -196,7 +196,6 @@ func main() {
 
 		for accum.MessagesAvailable() > 0 {
 			data := accum.Pop()
-//			fmt.Printf("Popped: %s\n", arrayAsHex(data))
 
 			if (data[0] == RX_PACKET_16BIT) {
 				senderAddr := (int(data[1]) << 8) + int(data[2])
@@ -210,6 +209,8 @@ func main() {
 				}
 
 				log.Printf("Payload: %s\n", arrayAsHex(payload))
+			} else {
+				fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))				
 			}
 		}
 	}
