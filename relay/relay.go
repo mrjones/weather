@@ -17,6 +17,8 @@ const (
 	
 	CHECKSUM_LENGTH = 1
 	RX_PACKET_16BIT = 0x81
+
+	AT_COMMAND = 0x08
 )
 
 const (
@@ -168,7 +170,38 @@ func (a* Accum) getSync(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
+type Frame struct {
+	length uint16
+	payload []byte
+	checksum uint8
+}
 
+func NewFrame(payload []byte) *Frame {
+	length := len(payload)
+	sum := uint8(0)
+	for i := 0 ; i < length; i++ {
+		sum = (sum + uint8(payload[i])) & 0xFF
+	}
+	checksum := 0xFF - sum;
+
+	return &Frame{
+		length: uint16(length),
+		payload: payload,
+		checksum: checksum,
+	}
+}
+
+func (f *Frame) Serialize() ([]byte) {
+	data := make([]byte, f.length + 4)
+	data[0] = 0x7E
+	data[1] = byte(f.length >> 8)
+	data[2] = byte(f.length & 0xFF)
+	for i := uint16(0) ; i < f.length; i++ {
+		data[3 + i] = f.payload[i]
+	}
+	data[f.length + 3] = f.checksum
+	return data
+}
 
 func main() {
 	serialPort := "/dev/ttyAMA0"
@@ -180,21 +213,13 @@ func main() {
 
 	log.Printf("Opened '%s'\n", serialPort)
 
-	// [ 0x7E, 0x00, 0x04, 0x08, 0x52, 0x44, 0x4C, 0x15 ]
-	writePl := make([]byte, 8)
-	writePl[0] = 0x7E
-	writePl[1] = 0x00
-	writePl[2] = 0x04
-	writePl[3] = 0x08
-	writePl[4] = 0x52
-	writePl[5] = 0x44
-	writePl[6] = 0x4C
-	writePl[7] = 0x15
+	f := NewFrame([]byte{ AT_COMMAND, 0x52, byte('M'), byte('Y') })
+	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
 
 	buf := make([]byte, 128)
 	accum := NewAccum()
-	wn, err :=file.Write(writePl)
+	wn, err :=file.Write(f.Serialize())
 	if err != nil {
 		log.Println(err)
 	} else {
