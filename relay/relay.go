@@ -5,16 +5,16 @@ package main
 import (
 	"container/list"
 	"fmt"
-  "log"
+	"log"
 	"os"
 )
 
 const (
 	FRAME_DELIMITER = 0x7E
-	ESCAPE = 0x7D
-	
+	ESCAPE          = 0x7D
+
 	LENGTH_BYTES = 2
-	
+
 	CHECKSUM_LENGTH = 1
 	RX_PACKET_16BIT = 0x81
 
@@ -22,19 +22,19 @@ const (
 )
 
 const (
-	STATE_OUT_OF_SYNC = iota
+	STATE_OUT_OF_SYNC           = iota
 	STATE_FOUND_FRAME_DELIMITER = iota
-	STATE_PARSED_LENGTH = iota
-	STATE_CONSUMED_PAYLOAD = iota
-	STATE_MESSAGE_DONE = iota
+	STATE_PARSED_LENGTH         = iota
+	STATE_CONSUMED_PAYLOAD      = iota
+	STATE_MESSAGE_DONE          = iota
 )
 
 type Accum struct {
-	state int
+	state                int
 	bytesConsumedInState int
-	payloadLength int
-	payload []byte
-	checksum int
+	payloadLength        int
+	payload              []byte
+	checksum             int
 
 	messages *list.List
 }
@@ -45,17 +45,17 @@ func NewAccum() *Accum {
 	return a
 }
 
-func (a *Accum) MessagesAvailable() (int) {
+func (a *Accum) MessagesAvailable() int {
 	return a.messages.Len()
 }
 
-func (a *Accum) Pop() ([]byte) {
-	e := a.messages.Front();
+func (a *Accum) Pop() []byte {
+	e := a.messages.Front()
 	a.messages.Remove(e)
 	return e.Value.([]byte)
 }
 
-func (a* Accum) Consume(data []byte, offset int, len int) error {
+func (a *Accum) Consume(data []byte, offset int, len int) error {
 	if offset >= len {
 		return nil
 	}
@@ -91,18 +91,18 @@ func (a* Accum) Consume(data []byte, offset int, len int) error {
 	}
 }
 
-func (a* Accum) transition(state int) {
+func (a *Accum) transition(state int) {
 	a.state = state
 	a.bytesConsumedInState = 0
 }
 
-func (a* Accum) reset() {
+func (a *Accum) reset() {
 	a.payloadLength = 0
 	a.checksum = 0
 	a.transition(STATE_OUT_OF_SYNC)
 }
 
-func arrayAsHex(a []byte) (string) {
+func arrayAsHex(a []byte) string {
 	s := "[ "
 	for i := 0; i < len(a); i++ {
 		s += fmt.Sprintf("0x%x ", a[i])
@@ -111,12 +111,12 @@ func arrayAsHex(a []byte) (string) {
 	return s
 }
 
-func (a* Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
+func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	a.checksum = int(data[offset])
 
-	v := 0;
+	v := 0
 	for i := 0; i < a.payloadLength; i++ {
-		v = (v + int(a.payload[i])) & 0xFF;
+		v = (v + int(a.payload[i])) & 0xFF
 	}
 
 	v = (v + a.checksum) & 0xFF
@@ -131,13 +131,13 @@ func (a* Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-func (a* Accum) copyPayload(data []byte, offset int, len int) (int, error) {
+func (a *Accum) copyPayload(data []byte, offset int, len int) (int, error) {
 	if a.bytesConsumedInState == 0 {
 		a.payload = make([]byte, a.payloadLength)
 	}
 
 	consumed := 0
-	for ; offset < len && a.bytesConsumedInState < a.payloadLength; {
+	for offset < len && a.bytesConsumedInState < a.payloadLength {
 		a.payload[a.bytesConsumedInState] = data[offset]
 		offset++
 		a.bytesConsumedInState++
@@ -151,7 +151,7 @@ func (a* Accum) copyPayload(data []byte, offset int, len int) (int, error) {
 	return consumed, nil
 }
 
-func (a* Accum) parseLength(data []byte, offset int, len int) (int, error) {
+func (a *Accum) parseLength(data []byte, offset int, len int) (int, error) {
 	a.payloadLength = (a.payloadLength << 8) + int(data[offset])
 	a.bytesConsumedInState++
 
@@ -162,7 +162,7 @@ func (a* Accum) parseLength(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-func (a* Accum) getSync(data []byte, offset int, len int) (int, error) {
+func (a *Accum) getSync(data []byte, offset int, len int) (int, error) {
 	if data[offset] == FRAME_DELIMITER {
 		a.transition(STATE_FOUND_FRAME_DELIMITER)
 	}
@@ -171,35 +171,35 @@ func (a* Accum) getSync(data []byte, offset int, len int) (int, error) {
 }
 
 type Frame struct {
-	length uint16
-	payload []byte
+	length   uint16
+	payload  []byte
 	checksum uint8
 }
 
 func NewFrame(payload []byte) *Frame {
 	length := len(payload)
 	sum := uint8(0)
-	for i := 0 ; i < length; i++ {
+	for i := 0; i < length; i++ {
 		sum = (sum + uint8(payload[i])) & 0xFF
 	}
-	checksum := 0xFF - sum;
+	checksum := 0xFF - sum
 
 	return &Frame{
-		length: uint16(length),
-		payload: payload,
+		length:   uint16(length),
+		payload:  payload,
 		checksum: checksum,
 	}
 }
 
-func (f *Frame) Serialize() ([]byte) {
-	data := make([]byte, f.length + 4)
+func (f *Frame) Serialize() []byte {
+	data := make([]byte, f.length+4)
 	data[0] = 0x7E
 	data[1] = byte(f.length >> 8)
 	data[2] = byte(f.length & 0xFF)
-	for i := uint16(0) ; i < f.length; i++ {
-		data[3 + i] = f.payload[i]
+	for i := uint16(0); i < f.length; i++ {
+		data[3+i] = f.payload[i]
 	}
-	data[f.length + 3] = f.checksum
+	data[f.length+3] = f.checksum
 	return data
 }
 
@@ -208,18 +208,17 @@ func main() {
 
 	file, err := os.OpenFile(serialPort, os.O_RDWR, 0666)
 	if err != nil {
-		log.Fatal(err);
+		log.Fatal(err)
 	}
 
 	log.Printf("Opened '%s'\n", serialPort)
-
-	f := NewFrame([]byte{ AT_COMMAND, 0x52, 'M', 'Y' })
+	// ND doesn't work
+	f := NewFrame([]byte{AT_COMMAND, 0x52, 'V', 'R'})
 	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
-
 
 	buf := make([]byte, 128)
 	accum := NewAccum()
-	wn, err :=file.Write(f.Serialize())
+	wn, err := file.Write(f.Serialize())
 	if err != nil {
 		log.Println(err)
 	} else {
@@ -241,22 +240,21 @@ func main() {
 		for accum.MessagesAvailable() > 0 {
 			data := accum.Pop()
 
-			if (data[0] == RX_PACKET_16BIT) {
+			if data[0] == RX_PACKET_16BIT {
 				senderAddr := (int(data[1]) << 8) + int(data[2])
 				strength := int(data[3])
 				log.Printf("RSSI:    -%d dBm\n", strength)
-				log.Printf("Sender:  0x%x\n",senderAddr)
+				log.Printf("Sender:  0x%x\n", senderAddr)
 				payloadLength := len(data) - 4
 				var payload = make([]byte, payloadLength)
-				for i := 0 ; i < payloadLength; i++ {
-					payload[i] = data[i + 4]
+				for i := 0; i < payloadLength; i++ {
+					payload[i] = data[i+4]
 				}
 
 				log.Printf("Payload: %s\n", arrayAsHex(payload))
 			} else {
-				fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))				
+				fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
 			}
 		}
 	}
 }
-
