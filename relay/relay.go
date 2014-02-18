@@ -213,7 +213,7 @@ func main() {
 
 	log.Printf("Opened '%s'\n", serialPort)
 
-	f := NewFrame([]byte{ AT_COMMAND, 0x52, byte('M'), 'Y' })
+	f := NewFrame([]byte{ AT_COMMAND, 0x52, 'M', 'Y' })
 	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
 
