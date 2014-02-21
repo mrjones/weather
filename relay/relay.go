@@ -240,7 +240,6 @@ func main() {
 	accum := NewAccum()
 
 	// ND doesn't work
-	/*
 		f := NewFrame([]byte{AT_COMMAND, 0x52, 'V', 'R'})
 		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
@@ -250,7 +249,6 @@ func main() {
 		} else {
 			log.Printf("Write %d bytes\n", wn)
 		}
-	*/
 	for {
 		n, err := file.Read(buf)
 		log.Printf("Read %d bytes\n", n)
