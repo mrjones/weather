@@ -62,6 +62,8 @@ func (a *Accum) Consume(data []byte, offset int, len int) error {
 		return nil
 	}
 
+	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, len))
+
 	for {
 		var err error
 		n := 0
@@ -105,8 +107,12 @@ func (a *Accum) reset() {
 }
 
 func arrayAsHex(a []byte) string {
+	return arrayAsHexWithLen(a, len(a))
+}
+
+func arrayAsHexWithLen(a []byte, len int) string {
 	s := "[ "
-	for i := 0; i < len(a); i++ {
+	for i := 0; i < len; i++ {
 		s += fmt.Sprintf("0x%x ", a[i])
 	}
 	s += "]"
@@ -270,12 +276,14 @@ func main() {
 			if data[0] == RX_PACKET_16BIT {
 				senderAddr := (int(data[1]) << 8) + int(data[2])
 				strength := int(data[3])
+				options := int(data[4])
 				log.Printf("RSSI:    -%d dBm\n", strength)
 				log.Printf("Sender:  0x%x\n", senderAddr)
-				payloadLength := len(data) - 4
+				log.Printf("Options: 0x%x\n", options)
+				payloadLength := len(data) - 5
 				var payload = make([]byte, payloadLength)
 				for i := 0; i < payloadLength; i++ {
-					payload[i] = data[i+4]
+					payload[i] = data[i+5]
 				}
 
 				log.Printf("Payload: %s\n", arrayAsHex(payload))
