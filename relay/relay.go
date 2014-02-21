@@ -205,16 +205,7 @@ func (f *Frame) Serialize() []byte {
 	return data
 }
 
-func main() {
-	serialPort := "/dev/ttyAMA0"
-
-	file, err := os.OpenFile(serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Opened '%s'\n", serialPort)
-
+func configureSerial(file *os.File) {
 	fd := file.Fd()
 	t := syscall.Termios{
 		Iflag:  0,
@@ -235,12 +226,24 @@ func main() {
 	); errno != 0 {
 		log.Fatalf("Errno configuring serial port: %d\n", errno)
 	}
+}
+
+func main() {
+	serialPort := "/dev/ttyAMA0"
+
+	file, err := os.OpenFile(serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
+	if err != nil {
+		log.Fatal(err)
+	}
+	configureSerial(file)
+
+	log.Printf("Opened '%s'\n", serialPort)
 
 	buf := make([]byte, 128)
 	accum := NewAccum()
 
 	// ND doesn't work
-		f := NewFrame([]byte{AT_COMMAND, 0x52, 'V', 'R'})
+		f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
 		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
 		wn, err := file.Write(f.Serialize())
