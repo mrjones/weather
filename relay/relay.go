@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
+  "unsafe"
 )
 
 const (
@@ -60,6 +62,8 @@ func (a *Accum) Consume(data []byte, offset int, len int) error {
 		return nil
 	}
 
+	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, len))
+
 	for {
 		var err error
 		n := 0
@@ -103,8 +107,12 @@ func (a *Accum) reset() {
 }
 
 func arrayAsHex(a []byte) string {
+	return arrayAsHexWithLen(a, len(a))
+}
+
+func arrayAsHexWithLen(a []byte, len int) string {
 	s := "[ "
-	for i := 0; i < len(a); i++ {
+	for i := 0; i < len; i++ {
 		s += fmt.Sprintf("0x%x ", a[i])
 	}
 	s += "]"
@@ -203,28 +211,53 @@ func (f *Frame) Serialize() []byte {
 	return data
 }
 
+func configureSerial(file *os.File) {
+	fd := file.Fd()
+	t := syscall.Termios{
+		Iflag:  0,
+		Cflag:  syscall.CS8 | syscall.CREAD | syscall.CLOCAL | syscall.B9600,
+		Cc:     [32]uint8{syscall.VMIN: 1},
+		Ispeed: syscall.B9600,
+		Ospeed: syscall.B9600,
+	}
+
+	if _, _, errno := syscall.Syscall6(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(syscall.TCSETS),
+		uintptr(unsafe.Pointer(&t)),
+		0,
+		0,
+		0,
+	); errno != 0 {
+		log.Fatalf("Errno configuring serial port: %d\n", errno)
+	}
+}
+
 func main() {
 	serialPort := "/dev/ttyAMA0"
 
-	file, err := os.OpenFile(serialPort, os.O_RDWR, 0666)
+	file, err := os.OpenFile(serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
+	configureSerial(file)
 
 	log.Printf("Opened '%s'\n", serialPort)
-	// ND doesn't work
-	f := NewFrame([]byte{AT_COMMAND, 0x52, 'V', 'R'})
-	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
 	buf := make([]byte, 128)
 	accum := NewAccum()
-	wn, err := file.Write(f.Serialize())
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Printf("Write %d bytes\n", wn)
-	}
 
+	// ND doesn't work
+		f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
+		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
+
+		wn, err := file.Write(f.Serialize())
+		if err != nil {
+			log.Println(err)
+		} else {
+			log.Printf("Write %d bytes\n", wn)
+		}
 	for {
 		n, err := file.Read(buf)
 		log.Printf("Read %d bytes\n", n)
@@ -243,12 +276,14 @@ func main() {
 			if data[0] == RX_PACKET_16BIT {
 				senderAddr := (int(data[1]) << 8) + int(data[2])
 				strength := int(data[3])
+				options := int(data[4])
 				log.Printf("RSSI:    -%d dBm\n", strength)
 				log.Printf("Sender:  0x%x\n", senderAddr)
-				payloadLength := len(data) - 4
+				log.Printf("Options: 0x%x\n", options)
+				payloadLength := len(data) - 5
 				var payload = make([]byte, payloadLength)
 				for i := 0; i < payloadLength; i++ {
-					payload[i] = data[i+4]
+					payload[i] = data[i+5]
 				}
 
 				log.Printf("Payload: %s\n", arrayAsHex(payload))
