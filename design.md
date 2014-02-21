@@ -55,7 +55,7 @@ REPORT(int32 metricId, int64 value, int64 timestamp)
 Questions:
 - Same protocol sensor->relay as relay->hub?
 - batch reporting?
-
+- binary vs text/ascii protocol
 
 Push vs. pull
 -------------

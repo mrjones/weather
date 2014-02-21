@@ -49,8 +49,8 @@ void loop() {
     Serial.print("Temperature: ");
     Serial.println((int)tempF);
     
-    xbeeSendInt((int)relHumidity);
-    xbeeSendInt((int)tempF);
+    xbeeSendVarUint((unsigned long)relHumidity);
+    xbeeSendVarUint((unsigned long)tempF);
   }
   
   delay(10 * 1000);
@@ -161,13 +161,33 @@ boolean fetchData(float* relHumidity, float* tempF) {
 // XBee Functions
 // =====================================
 
+void xbeeSendVarUint(unsigned long val) {
+  int width = 1;
+  if (width > pow(2, 24) - 1) {
+    width = 4;
+  } else if (width > pow(2, 16) - 1) {
+    width = 3;
+  } else if (width > pow(2, 8) - 1) {
+    width = 2;
+  }
+
+  byte data[width + 1];
+  data[0] = width;
+  for (int i = 0; i < width; i++) {
+    data[i + 1] = val & 0xFF;  // TODO: decide endianness
+    val = val >> 8;
+  }
+
+  xbee.write(data, width + 1);
+}
+
 void xbeeSendInt(int i) {
   if (debug >= SOME) {
     Serial.print("Sending '");
     Serial.print(i);
     Serial.println("'");
   }
-  xbee.print(i);
+  xbee.write(i);
 }
 
 void xbeeSend(String s) {
@@ -257,12 +277,12 @@ bool xbeeSetup() {
      return false; 
   }
   
-  xbeeSend("ATMY5678\r");
+  xbeeSend("ATMY2222\r");
   if (!xbeeIsOk()) {
     return false; 
   }
   
-  xbeeSend("ATDL1234\r");
+  xbeeSend("ATDL5678\r");
   if (!xbeeIsOk()) {
     return false; 
   }
