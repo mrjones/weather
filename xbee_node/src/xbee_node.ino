@@ -167,7 +167,7 @@ void xbeeSendInt(int i) {
     Serial.print(i);
     Serial.println("'");
   }
-  xbee.print(i);
+  xbee.write(i);
 }
 
 void xbeeSend(String s) {
@@ -262,7 +262,7 @@ bool xbeeSetup() {
     return false; 
   }
   
-  xbeeSend("ATDL1111\r");
+  xbeeSend("ATDL5678\r");
   if (!xbeeIsOk()) {
     return false; 
   }
