@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"syscall"
+  "unsafe"
 )
 
 const (
@@ -206,25 +208,49 @@ func (f *Frame) Serialize() []byte {
 func main() {
 	serialPort := "/dev/ttyAMA0"
 
-	file, err := os.OpenFile(serialPort, os.O_RDWR, 0666)
+	file, err := os.OpenFile(serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	log.Printf("Opened '%s'\n", serialPort)
-	// ND doesn't work
-	f := NewFrame([]byte{AT_COMMAND, 0x52, 'V', 'R'})
-	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
+
+	fd := file.Fd()
+	t := syscall.Termios{
+		Iflag:  0,
+		Cflag:  syscall.CS8 | syscall.CREAD | syscall.CLOCAL | syscall.B9600,
+		Cc:     [32]uint8{syscall.VMIN: 1},
+		Ispeed: syscall.B9600,
+		Ospeed: syscall.B9600,
+	}
+
+	if _, _, errno := syscall.Syscall6(
+		syscall.SYS_IOCTL,
+		uintptr(fd),
+		uintptr(syscall.TCSETS),
+		uintptr(unsafe.Pointer(&t)),
+		0,
+		0,
+		0,
+	); errno != 0 {
+		log.Fatalf("Errno configuring serial port: %d\n", errno)
+	}
 
 	buf := make([]byte, 128)
 	accum := NewAccum()
-	wn, err := file.Write(f.Serialize())
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Printf("Write %d bytes\n", wn)
-	}
 
+	// ND doesn't work
+	/*
+		f := NewFrame([]byte{AT_COMMAND, 0x52, 'V', 'R'})
+		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
+
+		wn, err := file.Write(f.Serialize())
+		if err != nil {
+			log.Println(err)
+		} else {
+			log.Printf("Write %d bytes\n", wn)
+		}
+	*/
 	for {
 		n, err := file.Read(buf)
 		log.Printf("Read %d bytes\n", n)
