@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"syscall"
-  "unsafe"
+	"unsafe"
 )
 
 const (
@@ -224,19 +224,19 @@ func configureSerial(file *os.File) {
 }
 
 func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
-	if (offset >= uint(len(data))) {
+	if offset >= uint(len(data)) {
 		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), 0, 0
 	}
 
 	width := uint(data[offset])
 
-	if (offset + 1 + width > uint(len(data))) {
-		return fmt.Errorf("Can't parse value of width %d startting at %d. Length is only %d.", width, offset + 1, len(data)), 0, 0
+	if offset+1+width > uint(len(data)) {
+		return fmt.Errorf("Can't parse value of width %d startting at %d. Length is only %d.", width, offset+1, len(data)), 0, 0
 	}
 
 	val = 0
 	for i := uint(0); i < width; i++ {
-		val += uint64(data[offset + i + 1]) << (8 * i)
+		val += uint64(data[offset+i+1]) << (8 * i)
 	}
 
 	return nil, offset + 1 + width, val
@@ -246,7 +246,7 @@ func HandlePacket(data []byte, sender uint16) error {
 	log.Printf("Payload: %s\n", arrayAsHex(data))
 	i := uint(0)
 
-	err, i, protocolVersion := decodeVarUint(data, i);
+	err, i, protocolVersion := decodeVarUint(data, i)
 	if err != nil {
 		return err
 	}
@@ -256,14 +256,14 @@ func HandlePacket(data []byte, sender uint16) error {
 
 	log.Printf("protocol version: %d\n", protocolVersion)
 
-	err, i, method := decodeVarUint(data, i);
+	err, i, method := decodeVarUint(data, i)
 	if err != nil {
 		return err
 	}
 	log.Printf("method: %d\n", method)
 
 	if method == 1 {
-		err, i, numMetrics := decodeVarUint(data, i);
+		err, i, numMetrics := decodeVarUint(data, i)
 		if err != nil {
 			return err
 		}
@@ -273,12 +273,12 @@ func HandlePacket(data []byte, sender uint16) error {
 		for m := uint64(0); m < numMetrics; m++ {
 			mid := uint64(0)
 			val := uint64(0)
-			err, i, mid = decodeVarUint(data, i);
+			err, i, mid = decodeVarUint(data, i)
 			if err != nil {
 				return err
 			}
 
-			err, i, val = decodeVarUint(data, i);
+			err, i, val = decodeVarUint(data, i)
 			if err != nil {
 				return err
 			}
@@ -346,7 +346,6 @@ func main() {
 	} else {
 		log.Printf("Write %d bytes\n", wn)
 	}
-
 
 	for {
 		n, err := file.Read(buf)
