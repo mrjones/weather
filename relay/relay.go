@@ -3,7 +3,6 @@
 package main
 
 import (
-	"container/list"
 	"fmt"
 	"log"
 	"os"
@@ -38,23 +37,13 @@ type Accum struct {
 	payload              []byte
 	checksum             int
 
-	messages *list.List
+	messages chan []byte
 }
 
-func NewAccum() *Accum {
-	a := &Accum{messages: list.New()}
+func NewAccum(messages chan []byte) *Accum {
+	a := &Accum{messages: messages}
 	a.reset()
 	return a
-}
-
-func (a *Accum) MessagesAvailable() int {
-	return a.messages.Len()
-}
-
-func (a *Accum) Pop() []byte {
-	e := a.messages.Front()
-	a.messages.Remove(e)
-	return e.Value.([]byte)
 }
 
 func (a *Accum) Consume(data []byte, offset int, len int) error {
@@ -130,7 +119,7 @@ func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	v = (v + a.checksum) & 0xFF
 
 	if v == 0xFF {
-		a.messages.PushBack(a.payload)
+		a.messages <- a.payload
 		a.reset()
 	} else {
 		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
@@ -261,6 +250,10 @@ func HandlePacket(data []byte, sender uint16) error {
 	if err != nil {
 		return err
 	}
+	if protocolVersion != 1 {
+		return fmt.Errorf("Unsupported protocol version %d.", protocolVersion)
+	}
+
 	log.Printf("protocol version: %d\n", protocolVersion)
 
 	err, i, method := decodeVarUint(data, i);
@@ -299,10 +292,38 @@ func HandlePacket(data []byte, sender uint16) error {
 	return nil
 }
 
+func ConsumeXbeeMessages(messages chan []byte) {
+	for {
+		data := <-messages
+		if data[0] == RX_PACKET_16BIT {
+			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
+			strength := int(data[3])
+			options := int(data[4])
+			log.Printf("RSSI:    -%d dBm\n", strength)
+			log.Printf("Sender:  0x%x\n", senderAddr)
+			log.Printf("Options: 0x%x\n", options)
+			payloadLength := len(data) - 5
+			var payload = make([]byte, payloadLength)
+			for i := 0; i < payloadLength; i++ {
+				payload[i] = data[i+5]
+			}
+
+			err := HandlePacket(payload, senderAddr)
+			if err != nil {
+				log.Println(err)
+			}
+		} else {
+			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
+		}
+	}
+}
+
 func main() {
 	serialPort := "/dev/ttyAMA0"
 
-	file, err := os.OpenFile(serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
+	file, err := os.OpenFile(
+		serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -310,19 +331,23 @@ func main() {
 
 	log.Printf("Opened '%s'\n", serialPort)
 
+	xbeeMessages := make(chan []byte)
 	buf := make([]byte, 128)
-	accum := NewAccum()
+	accum := NewAccum(xbeeMessages)
+	go ConsumeXbeeMessages(xbeeMessages)
 
 	// ND doesn't work
-		f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
-		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
+	f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
+	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
-		wn, err := file.Write(f.Serialize())
-		if err != nil {
-			log.Println(err)
-		} else {
-			log.Printf("Write %d bytes\n", wn)
-		}
+	wn, err := file.Write(f.Serialize())
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Printf("Write %d bytes\n", wn)
+	}
+
+
 	for {
 		n, err := file.Read(buf)
 		log.Printf("Read %d bytes\n", n)
@@ -333,31 +358,6 @@ func main() {
 		err = accum.Consume(buf, 0, n)
 		if err != nil {
 			log.Fatal(err)
-		}
-
-		for accum.MessagesAvailable() > 0 {
-			data := accum.Pop()
-
-			if data[0] == RX_PACKET_16BIT {
-				senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
-				strength := int(data[3])
-				options := int(data[4])
-				log.Printf("RSSI:    -%d dBm\n", strength)
-				log.Printf("Sender:  0x%x\n", senderAddr)
-				log.Printf("Options: 0x%x\n", options)
-				payloadLength := len(data) - 5
-				var payload = make([]byte, payloadLength)
-				for i := 0; i < payloadLength; i++ {
-					payload[i] = data[i+5]
-				}
-
-				err := HandlePacket(payload, senderAddr)
-				if err != nil {
-					log.Println(err)
-				}
-			} else {
-				fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
-			}
 		}
 	}
 }
