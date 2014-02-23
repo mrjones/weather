@@ -37,6 +37,15 @@ type DataPacket struct {
 	options byte
 }
 
+func (d *DataPacket) DebugString() string {
+	return fmt.Sprintf(
+		"RSSI:    -%d dBm\n" +
+		"Sender:  0x%x\n" +
+		"Options: 0x%x\n" +
+		"Payload: %x\n",
+		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
+}
+
 type XbeeFrame struct {
 	length   uint16
 	payload  []byte
@@ -327,23 +336,20 @@ func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPack
 				continue
 			}
 			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
-			strength := int(data[3])
-			options := int(data[4])
-			log.Printf("RSSI:    -%d dBm\n", strength)
-			log.Printf("Sender:  0x%x\n", senderAddr)
-			log.Printf("Options: 0x%x\n", options)
 			payloadLength := len(data) - 5
 			var payload = make([]byte, payloadLength)
 			for i := 0; i < payloadLength; i++ {
 				payload[i] = data[i+5]
 			}
 
-			rxPackets <- &DataPacket{
+			packet := &DataPacket{
 				payload: payload,
 				sender:  senderAddr,
 				rssi: uint8(data[3]),
 				options: data[4],
 			}
+			log.Printf("%s", packet.DebugString())	
+			rxPackets <- packet
 		} else {
 			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
 		}
