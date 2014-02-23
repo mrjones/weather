@@ -84,10 +84,9 @@ func NewAccum(frameSink chan XbeeFrame) *Accum {
 
 func (a *Accum) Consume(data []byte, offset int, length int) error {
 	if offset + length > len(data) {
-		return fmt.Errorf("Can't consume bytes %d to %d. Array length is %d.",
+		return fmt.Errorf("Can't consume bytes [%d,%d). Array length is %d.",
 			offset, offset + length, len(data))
 	}
-
 
 	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, length))
 
