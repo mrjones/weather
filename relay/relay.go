@@ -44,9 +44,6 @@ type XbeeFrame struct {
 type Accum struct {
 	state                int
 	bytesConsumedInState uint16
-//	payloadLength        int
-//	payload              []byte
-//	checksum             int
 
 	currentFrame XbeeFrame
 	frameSink chan XbeeFrame
@@ -179,13 +176,7 @@ func (a *Accum) getSync(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-type Frame struct {
-	length   uint16
-	payload  []byte
-	checksum uint8
-}
-
-func NewFrame(payload []byte) *Frame {
+func NewFrame(payload []byte) *XbeeFrame {
 	length := len(payload)
 	sum := uint8(0)
 	for i := 0; i < length; i++ {
@@ -193,14 +184,14 @@ func NewFrame(payload []byte) *Frame {
 	}
 	checksum := 0xFF - sum
 
-	return &Frame{
+	return &XbeeFrame{
 		length:   uint16(length),
 		payload:  payload,
 		checksum: checksum,
 	}
 }
 
-func (f *Frame) Serialize() []byte {
+func (f *XbeeFrame) Serialize() []byte {
 	data := make([]byte, f.length+4)
 	data[0] = 0x7E
 	data[1] = byte(f.length >> 8)
