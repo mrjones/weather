@@ -296,9 +296,9 @@ func HandlePacket(data []byte, sender uint16) error {
 	return nil
 }
 
-func ConsumeXbeeMessages(messages chan XbeeFrame) {
+func ConsumeXbeeFrames(frameSource chan XbeeFrame) {
 	for {
-		frame := <-messages
+		frame := <-frameSource
 		data := frame.payload
 		if data[0] == RX_PACKET_16BIT {
 			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
@@ -336,10 +336,10 @@ func main() {
 
 	log.Printf("Opened '%s'\n", serialPort)
 
-	xbeeMessages := make(chan XbeeFrame)
+	xbeeFrames := make(chan XbeeFrame)
 	buf := make([]byte, 128)
-	accum := NewAccum(xbeeMessages)
-	go ConsumeXbeeMessages(xbeeMessages)
+	accum := NewAccum(xbeeFrames)
+	go ConsumeXbeeFrames(xbeeFrames)
 
 	// ND doesn't work
 	f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
