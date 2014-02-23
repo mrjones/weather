@@ -206,3 +206,46 @@ func TestIgnoresUnknownFrames(t *testing.T) {
 		t.Errorf("Got an unexpected packet after reading a garbage frame")
 	}
 }
+
+// ===============
+
+func ReportsEq(expected, actual *ReportMetricsMessage, t *testing.T) {
+	if expected.sender != actual.sender {
+		t.Errorf("ReportMetricsMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
+	}
+
+	if len(expected.metrics) != len(actual.metrics) {
+		t.Errorf("ReportMetricsMessages don't match in 'len(metrics)' param.\nExpected: %d.\nActual: %d.", len(expected.metrics), len(actual.metrics))
+	}
+	
+	for i := 0; i < len(expected.metrics) && i < len(actual.metrics); i++ {
+		e := expected.metrics[i]
+		a := actual.metrics[i]
+		if e.id != a.id || e.value != a.value {
+			t.Errorf("ReportMetricsMessages don't match at metric[%d].\nExpected {id:%d, value:%d}\nActual {id:%d, value:%d}", i, e.id, e.value, a.id, a.value)
+		}
+	}
+}
+
+func TestMetricReport(t *testing.T) {
+	packets := make(chan *RxPacket, 1)
+	reports := make(chan *ReportMetricsMessage, 1)
+
+	go HandleReceivedPackets(packets, reports)
+
+	packets <- &RxPacket{
+		payload: []byte {0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 0x1, 0x2, 0x1, 0x4},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	actual := <- reports
+	
+	ReportsEq(
+		&ReportMetricsMessage{
+			sender: 0x2222,
+			metrics: []Metric {
+				Metric{id: 1, value: 3}, Metric{id: 2, value: 4} },
+		}, actual, t)
+}

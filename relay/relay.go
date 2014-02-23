@@ -20,6 +20,8 @@ const (
 	RX_PACKET_16BIT = 0x81
 
 	AT_COMMAND = 0x08
+
+	REPORT_METRICS_MESSAGE_TYPE = 1
 )
 
 const (
@@ -29,6 +31,16 @@ const (
 	STATE_CONSUMED_PAYLOAD      = iota
 	STATE_MESSAGE_DONE          = iota
 )
+
+type Metric struct {
+	id uint64
+	value uint64
+}
+
+type ReportMetricsMessage struct {
+	sender uint16
+	metrics []Metric
+}
 
 type RxPacket struct {
 	payload []byte
@@ -258,11 +270,17 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleReceivedPackets(rxPackets <-chan *RxPacket) {
+func HandleReceivedPackets(rxPackets <-chan *RxPacket, reportedMetrics chan<- *ReportMetricsMessage) {
 	for {
-		message := <-rxPackets
-		data := message.payload
-		sender := message.sender
+		packet, ok := <-rxPackets
+		if !ok {
+			log.Println("HandleReceivedPackets shutting down")
+			close(reportedMetrics)
+			return
+		}
+
+		data := packet.payload
+		sender := packet.sender
 
 		log.Printf("Payload: %s\n", arrayAsHex(data))
 		log.Printf("Sender:  0x%x\n", sender)
@@ -287,14 +305,15 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket) {
 		}
 		log.Printf("method: %d\n", method)
 
-		if method == 1 {
+		if method == REPORT_METRICS_MESSAGE_TYPE {
+			report := &ReportMetricsMessage{sender: sender}
 			err, i, numMetrics := decodeVarUint(data, i)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
 			log.Printf("num metrics: %d\n", numMetrics)
-			vals := make([]uint64, numMetrics)
+			report.metrics = make([]Metric, numMetrics)
 
 			for m := uint64(0); m < numMetrics; m++ {
 				mid := uint64(0)
@@ -311,9 +330,11 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket) {
 					continue
 				}
 
-				vals[m] = val
-				log.Printf("metric[%d]: %d\n", mid, vals[m])
+				report.metrics[m].id = mid
+				report.metrics[m].value = val
+				log.Printf("metric[%d]: %d\n", mid, report.metrics[m].value)
 			}
+			reportedMetrics <- report
 		} else {
 			fmt.Println(fmt.Errorf("Unknown method %d", method))
 		}
@@ -371,10 +392,11 @@ func main() {
 
 	xbeeFrames := make(chan *XbeeFrame)
 	rxPackets := make(chan *RxPacket)
+	reportedMetrics := make(chan *ReportMetricsMessage)
 
 	accum := NewAccum(xbeeFrames)
 	go ConsumeXbeeFrames(xbeeFrames, rxPackets)
-	go HandleReceivedPackets(rxPackets)
+	go HandleReceivedPackets(rxPackets, reportedMetrics)
 
 	buf := make([]byte, 128)
 
