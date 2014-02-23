@@ -218,11 +218,10 @@ func ReportsEq(expected, actual *ReportMetricsMessage, t *testing.T) {
 		t.Errorf("ReportMetricsMessages don't match in 'len(metrics)' param.\nExpected: %d.\nActual: %d.", len(expected.metrics), len(actual.metrics))
 	}
 	
-	for i := 0; i < len(expected.metrics) && i < len(actual.metrics); i++ {
-		e := expected.metrics[i]
-		a := actual.metrics[i]
-		if e.id != a.id || e.value != a.value {
-			t.Errorf("ReportMetricsMessages don't match at metric[%d].\nExpected {id:%d, value:%d}\nActual {id:%d, value:%d}", i, e.id, e.value, a.id, a.value)
+	for ek, ev := range expected.metrics {
+		av := actual.metrics[ek]
+		if ev != av {
+			t.Errorf("ReportMetricsMessages don't match at metric with id '%d'.\nExpected %d\nActual: %d.", ek, ev, av)
 		}
 	}
 }
@@ -245,7 +244,6 @@ func TestMetricReport(t *testing.T) {
 	ReportsEq(
 		&ReportMetricsMessage{
 			sender: 0x2222,
-			metrics: []Metric {
-				Metric{id: 1, value: 3}, Metric{id: 2, value: 4} },
+			metrics: map[uint64]int64 {1: 3, 2: 4},
 		}, actual, t)
 }

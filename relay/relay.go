@@ -32,14 +32,9 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
-type Metric struct {
-	id uint64
-	value uint64
-}
-
 type ReportMetricsMessage struct {
 	sender uint16
-	metrics []Metric
+	metrics map[uint64]int64  // map from id to value
 }
 
 type RxPacket struct {
@@ -313,7 +308,7 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket, reportedMetrics chan<- *R
 				continue
 			}
 			log.Printf("num metrics: %d\n", numMetrics)
-			report.metrics = make([]Metric, numMetrics)
+			report.metrics = make(map[uint64]int64)
 
 			for m := uint64(0); m < numMetrics; m++ {
 				mid := uint64(0)
@@ -330,9 +325,8 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket, reportedMetrics chan<- *R
 					continue
 				}
 
-				report.metrics[m].id = mid
-				report.metrics[m].value = val
-				log.Printf("metric[%d]: %d\n", mid, report.metrics[m].value)
+				report.metrics[mid] = int64(val)
+				log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
 			}
 			reportedMetrics <- report
 		} else {
