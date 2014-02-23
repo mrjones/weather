@@ -32,12 +32,12 @@ const (
 
 type RawApplicationMessage struct {
 	payload []byte
-	sender uint16
+	sender  uint16
 }
 
 type XbeeFrame struct {
-	length uint16
-	payload []byte
+	length   uint16
+	payload  []byte
 	checksum uint8
 }
 
@@ -68,13 +68,12 @@ func (f *XbeeFrame) Serialize() []byte {
 	return data
 }
 
-
 type Accum struct {
 	state                int
 	bytesConsumedInState uint16
 
 	currentFrame XbeeFrame
-	frameSink chan XbeeFrame
+	frameSink    chan XbeeFrame
 }
 
 func NewAccum(frameSink chan XbeeFrame) *Accum {
@@ -248,7 +247,7 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 
 func HandleApplicationMessages(messages chan RawApplicationMessage) {
 	for {
-		message := <- messages
+		message := <-messages
 		data := message.payload
 		sender := message.sender
 
@@ -308,7 +307,6 @@ func HandleApplicationMessages(messages chan RawApplicationMessage) {
 	}
 }
 
-
 func ConsumeXbeeFrames(frameSource chan XbeeFrame, applicationMessages chan RawApplicationMessage) {
 	for {
 		frame := <-frameSource
@@ -328,7 +326,7 @@ func ConsumeXbeeFrames(frameSource chan XbeeFrame, applicationMessages chan RawA
 
 			applicationMessages <- RawApplicationMessage{
 				payload: payload,
-				sender: senderAddr,
+				sender:  senderAddr,
 			}
 		} else {
 			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
