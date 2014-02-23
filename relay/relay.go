@@ -72,11 +72,11 @@ type Accum struct {
 	state                int
 	bytesConsumedInState uint16
 
-	currentFrame XbeeFrame
-	frameSink    chan XbeeFrame
+	currentFrame *XbeeFrame
+	frameSink    chan *XbeeFrame
 }
 
-func NewAccum(frameSink chan XbeeFrame) *Accum {
+func NewAccum(frameSink chan *XbeeFrame) *Accum {
 	a := &Accum{frameSink: frameSink}
 	a.reset()
 	return a
@@ -128,8 +128,7 @@ func (a *Accum) transition(state int) {
 }
 
 func (a *Accum) reset() {
-	a.currentFrame.length = 0
-	a.currentFrame.checksum = 0
+	a.currentFrame = &XbeeFrame{length: 0, checksum: 0}
 	a.transition(STATE_OUT_OF_SYNC)
 }
 
@@ -310,7 +309,7 @@ func HandleApplicationMessages(messages chan RawApplicationMessage) {
 	}
 }
 
-func ConsumeXbeeFrames(frameSource chan XbeeFrame, applicationMessages chan RawApplicationMessage) {
+func ConsumeXbeeFrames(frameSource chan *XbeeFrame, applicationMessages chan RawApplicationMessage) {
 	for {
 		frame := <-frameSource
 		data := frame.payload
@@ -350,7 +349,7 @@ func main() {
 
 	log.Printf("Opened '%s'\n", serialPort)
 
-	xbeeFrames := make(chan XbeeFrame)
+	xbeeFrames := make(chan *XbeeFrame)
 	applicationMessages := make(chan RawApplicationMessage)
 
 	accum := NewAccum(xbeeFrames)

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func FramesEq(expected, actual XbeeFrame, t *testing.T) {
+func FramesEq(expected, actual *XbeeFrame, t *testing.T) {
 	if expected.length != actual.length {
 		t.Errorf("XbeeFrames don't match in 'length' param.\nExpected: '%d'.\nActual: '%d'.", expected.length, actual.length)
 	}
@@ -26,7 +26,7 @@ func AssertNoError(err error, t *testing.T) {
 }
 
 func TestConsumeMessageAllAtOnce(t *testing.T) {
-	output := make(chan XbeeFrame, 1)
+	output := make(chan *XbeeFrame, 1)
 	accum := NewAccum(output)
 
 	AssertNoError(accum.Consume(
@@ -35,7 +35,7 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 	actual := <-output
 
 	FramesEq(
-		XbeeFrame{
+		&XbeeFrame{
 			length: 3,
 			payload: []byte {0x12, 0x34, 0x56},
 			checksum: 0x63,
@@ -43,7 +43,7 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 }
 
 func TestConsumeMessageByteByByte(t *testing.T) {
-	output := make(chan XbeeFrame, 1)
+	output := make(chan *XbeeFrame, 1)
 	accum := NewAccum(output)
 
 	AssertNoError(accum.Consume([]byte{0x7e}, 0, 1), t)
@@ -57,7 +57,7 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 	actual := <-output
 
 	FramesEq(
-		XbeeFrame{
+		&XbeeFrame{
 			length: 3,
 			payload: []byte {0x12, 0x34, 0x56},
 			checksum: 0x63,
@@ -65,7 +65,7 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 }
 
 func TestConsumeTwoMessages(t *testing.T) {
-	output := make(chan XbeeFrame, 2)
+	output := make(chan *XbeeFrame, 2)
 	accum := NewAccum(output)
 
 	AssertNoError(accum.Consume(
@@ -76,7 +76,7 @@ func TestConsumeTwoMessages(t *testing.T) {
 	actual1 := <-output
 
 	FramesEq(
-		XbeeFrame{
+		&XbeeFrame{
 			length: 3,
 			payload: []byte {0x12, 0x34, 0x56},
 			checksum: 0x63,
@@ -85,7 +85,7 @@ func TestConsumeTwoMessages(t *testing.T) {
 	actual2 := <-output
 
 	FramesEq(
-		XbeeFrame{
+		&XbeeFrame{
 			length: 4,
 			payload: []byte {0x12, 0x34, 0x56, 0x78},
 			checksum: 0xEB,
@@ -93,7 +93,7 @@ func TestConsumeTwoMessages(t *testing.T) {
 }
 
 func TestBoundsChecking(t *testing.T) {
-	output := make(chan XbeeFrame, 0)
+	output := make(chan *XbeeFrame, 0)
 	accum := NewAccum(output)
 
 	err := accum.Consume([]byte{0x7e}, 1, 1)
@@ -108,7 +108,7 @@ func TestBoundsChecking(t *testing.T) {
 }
 
 func TestVerifiesChecksum(t *testing.T) {
-	output := make(chan XbeeFrame, 0)
+	output := make(chan *XbeeFrame, 0)
 	accum := NewAccum(output)
 
 	err := accum.Consume([]byte{0x7e, 0x00, 0x01, 0x12, 0x00}, 0, 5)
