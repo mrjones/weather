@@ -217,7 +217,7 @@ func ReportsEq(expected, actual *ReportMetricsMessage, t *testing.T) {
 	if len(expected.metrics) != len(actual.metrics) {
 		t.Errorf("ReportMetricsMessages don't match in 'len(metrics)' param.\nExpected: %d.\nActual: %d.", len(expected.metrics), len(actual.metrics))
 	}
-	
+
 	for ek, ev := range expected.metrics {
 		av := actual.metrics[ek]
 		if ev != av {
@@ -233,18 +233,18 @@ func TestMetricReport(t *testing.T) {
 	go HandleReceivedPackets(packets, reports)
 
 	packets <- &RxPacket{
-		payload: []byte {0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 0x1, 0x2, 0x1, 0x4},
-		sender: 0x2222,
-		rssi: 0x12,
+		payload: []byte{0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 0x1, 0x2, 0x1, 0x4},
+		sender:  0x2222,
+		rssi:    0x12,
 		options: 0x00,
 	}
 
-	actual := <- reports
-	
+	actual := <-reports
+
 	ReportsEq(
 		&ReportMetricsMessage{
-			sender: 0x2222,
-			metrics: map[uint64]int64 {1: 3, 2: 4},
+			sender:  0x2222,
+			metrics: map[uint64]int64{1: 3, 2: 4},
 		}, actual, t)
 }
 
@@ -255,9 +255,9 @@ func TestMalformedMetricReport(t *testing.T) {
 	go HandleReceivedPackets(packets, reports)
 
 	packets <- &RxPacket{
-		payload: []byte {0x1},
-		sender: 0x2222,
-		rssi: 0x12,
+		payload: []byte{0x1},
+		sender:  0x2222,
+		rssi:    0x12,
 		options: 0x00,
 	}
 
@@ -267,7 +267,7 @@ func TestMalformedMetricReport(t *testing.T) {
 
 	if report != nil || ok {
 		t.Errorf("Got an unexpected report after processing garbage.")
-	}	
+	}
 }
 
 func TestUnsupportedProtocolVersion(t *testing.T) {
@@ -277,9 +277,9 @@ func TestUnsupportedProtocolVersion(t *testing.T) {
 	go HandleReceivedPackets(packets, reports)
 
 	packets <- &RxPacket{
-		payload: []byte {0x1, 0x2, 0x1, 0x1},
-		sender: 0x2222,
-		rssi: 0x12,
+		payload: []byte{0x1, 0x2, 0x1, 0x1},
+		sender:  0x2222,
+		rssi:    0x12,
 		options: 0x00,
 	}
 
@@ -289,7 +289,7 @@ func TestUnsupportedProtocolVersion(t *testing.T) {
 
 	if report != nil || ok {
 		t.Errorf("Got an unexpected report when protocol version was too new.")
-	}	
+	}
 }
 
 func TestUnknownMethod(t *testing.T) {
@@ -299,9 +299,9 @@ func TestUnknownMethod(t *testing.T) {
 	go HandleReceivedPackets(packets, reports)
 
 	packets <- &RxPacket{
-		payload: []byte {0x1, 0x1, 0x1, 0xFF},
-		sender: 0x2222,
-		rssi: 0x12,
+		payload: []byte{0x1, 0x1, 0x1, 0xFF},
+		sender:  0x2222,
+		rssi:    0x12,
 		options: 0x00,
 	}
 
@@ -311,7 +311,7 @@ func TestUnknownMethod(t *testing.T) {
 
 	if report != nil || ok {
 		t.Errorf("Got an unexpected report when the method id was bogus.")
-	}	
+	}
 }
 
 func TestReadMessageAfterError(t *testing.T) {
@@ -321,16 +321,16 @@ func TestReadMessageAfterError(t *testing.T) {
 	go HandleReceivedPackets(packets, reports)
 
 	packets <- &RxPacket{
-		payload: []byte {0x1, 0x1, 0x1, 0xFF},
-		sender: 0x2222,
-		rssi: 0x12,
+		payload: []byte{0x1, 0x1, 0x1, 0xFF},
+		sender:  0x2222,
+		rssi:    0x12,
 		options: 0x00,
 	}
 
 	packets <- &RxPacket{
-		payload: []byte {0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0xA, 0x1, 0xB},
-		sender: 0x2222,
-		rssi: 0x12,
+		payload: []byte{0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0xA, 0x1, 0xB},
+		sender:  0x2222,
+		rssi:    0x12,
 		options: 0x00,
 	}
 
@@ -338,8 +338,7 @@ func TestReadMessageAfterError(t *testing.T) {
 
 	ReportsEq(
 		&ReportMetricsMessage{
-			sender: 0x2222,
-			metrics: map[uint64]int64 {10: 11},
+			sender:  0x2222,
+			metrics: map[uint64]int64{10: 11},
 		}, actual, t)
 }
-

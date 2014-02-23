@@ -33,8 +33,8 @@ const (
 )
 
 type ReportMetricsMessage struct {
-	sender uint16
-	metrics map[uint64]int64  // map from id to value
+	sender  uint16
+	metrics map[uint64]int64 // map from id to value
 }
 
 func (m *ReportMetricsMessage) DebugString() string {
@@ -45,7 +45,7 @@ func (m *ReportMetricsMessage) DebugString() string {
 		sep = ", "
 	}
 	return fmt.Sprintf(
-			"Sender:  0x%x\n"+
+		"Sender:  0x%x\n"+
 			"Metrics: %s\n",
 		m.sender, vals)
 }
@@ -280,7 +280,7 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 
 func HandleReportedMetrics(reportedMetrics <-chan *ReportMetricsMessage) {
 	for {
-		report, ok := <- reportedMetrics
+		report, ok := <-reportedMetrics
 		if !ok {
 			log.Println("HandleReportedMetrics shutting down")
 			return
