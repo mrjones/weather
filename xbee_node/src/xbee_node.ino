@@ -48,8 +48,12 @@ void loop() {
     Serial.println((int)relHumidity);
     Serial.print("Temperature: ");
     Serial.println((int)tempF);
-    
+
+    xbeeSendFixedU32((unsigned long)1);  // method id
+    xbeeSendFixedU32((unsigned long)2);  // num metrics    
+    xbeeSendFixedU32((unsigned long)1);  // TODO: negotiate metric IDs
     xbeeSendVarUint((unsigned long)relHumidity);
+    xbeeSendFixedU32((unsigned long)2);  // TODO: negotiate metric IDs
     xbeeSendVarUint((unsigned long)tempF);
   }
   
@@ -181,13 +185,20 @@ void xbeeSendVarUint(unsigned long val) {
   xbee.write(data, width + 1);
 }
 
-void xbeeSendInt(int i) {
+void xbeeSendFixedU32(unsigned long val) {
   if (debug >= SOME) {
-    Serial.print("Sending '");
-    Serial.print(i);
+    Serial.print("Sending fixed 32 '");
+    Serial.print(val);
     Serial.println("'");
   }
-  xbee.write(i);
+
+  byte data[4];
+  for (int i = 0; i < 4; ++i) {
+    data[i] = val & 0xFF;
+    val = val >> 8;
+  }
+
+  xbee.write(data, 4);
 }
 
 void xbeeSend(String s) {
