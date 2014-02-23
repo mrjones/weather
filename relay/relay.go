@@ -39,8 +39,10 @@ type ReportMetricsMessage struct {
 
 func (m *ReportMetricsMessage) DebugString() string {
 	vals := ""
+	sep := ""
 	for k, v := range m.metrics {
-		vals += fmt.Sprintf("{%d=%d}", k, v)
+		vals += fmt.Sprintf("%s{%d=%d}", sep, k, v)
+		sep = ", "
 	}
 	return fmt.Sprintf(
 			"Sender:  0x%x\n"+
