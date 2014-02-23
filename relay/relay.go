@@ -37,6 +37,17 @@ type ReportMetricsMessage struct {
 	metrics map[uint64]int64  // map from id to value
 }
 
+func (m *ReportMetricsMessage) DebugString() string {
+	vals := ""
+	for k, v := range m.metrics {
+		vals += fmt.Sprintf("{%d=%d}", k, v)
+	}
+	return fmt.Sprintf(
+			"Sender:  0x%x\n"+
+			"Metrics: %s\n",
+		m.sender, vals)
+}
+
 type RxPacket struct {
 	payload []byte
 	sender  uint16
@@ -265,6 +276,18 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
+func HandleReportedMetrics(reportedMetrics <-chan *ReportMetricsMessage) {
+	for {
+		report, ok := <- reportedMetrics
+		if !ok {
+			log.Println("HandleReportedMetrics shutting down")
+			return
+		}
+
+		log.Printf("Reported metrics: %s", report.DebugString())
+	}
+}
+
 func HandleReceivedPackets(rxPackets <-chan *RxPacket, reportedMetrics chan<- *ReportMetricsMessage) {
 	for {
 		packet, ok := <-rxPackets
@@ -391,6 +414,7 @@ func main() {
 	accum := NewAccum(xbeeFrames)
 	go ConsumeXbeeFrames(xbeeFrames, rxPackets)
 	go HandleReceivedPackets(rxPackets, reportedMetrics)
+	go HandleReportedMetrics(reportedMetrics)
 
 	buf := make([]byte, 128)
 
