@@ -34,6 +34,11 @@ type XbeeFrame struct {
 	payload []byte
 }
 
+type RawApplicationMessage struct {
+	payload []byte
+	sender uint16
+}
+
 type Accum struct {
 	state                int
 	bytesConsumedInState int
@@ -246,57 +251,70 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandlePacket(data []byte, sender uint16) error {
-	log.Printf("Payload: %s\n", arrayAsHex(data))
-	i := uint(0)
+func HandleApplicationMessages(messages chan RawApplicationMessage) {
+	for {
+		message := <- messages
+		data := message.payload
+		sender := message.sender
 
-	err, i, protocolVersion := decodeVarUint(data, i)
-	if err != nil {
-		return err
-	}
-	if protocolVersion != 1 {
-		return fmt.Errorf("Unsupported protocol version %d.", protocolVersion)
-	}
+		log.Printf("Payload: %s\n", arrayAsHex(data))
+		log.Printf("Sender:  %d\n", sender)
+		i := uint(0)
 
-	log.Printf("protocol version: %d\n", protocolVersion)
-
-	err, i, method := decodeVarUint(data, i)
-	if err != nil {
-		return err
-	}
-	log.Printf("method: %d\n", method)
-
-	if method == 1 {
-		err, i, numMetrics := decodeVarUint(data, i)
+		err, i, protocolVersion := decodeVarUint(data, i)
 		if err != nil {
-			return err
+			fmt.Println(err)
+			continue
 		}
-		log.Printf("num metrics: %d\n", numMetrics)
-		vals := make([]uint64, numMetrics)
-
-		for m := uint64(0); m < numMetrics; m++ {
-			mid := uint64(0)
-			val := uint64(0)
-			err, i, mid = decodeVarUint(data, i)
-			if err != nil {
-				return err
-			}
-
-			err, i, val = decodeVarUint(data, i)
-			if err != nil {
-				return err
-			}
-
-			vals[m] = val
-			log.Printf("metric[%d]: %d\n", mid, vals[m])
+		if protocolVersion != 1 {
+			fmt.Println(fmt.Errorf("Unsupported protocol version %d.", protocolVersion))
+			continue
 		}
-	} else {
-		return fmt.Errorf("Unknown method %d", method)
+
+		log.Printf("protocol version: %d\n", protocolVersion)
+
+		err, i, method := decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		log.Printf("method: %d\n", method)
+
+		if method == 1 {
+			err, i, numMetrics := decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			log.Printf("num metrics: %d\n", numMetrics)
+			vals := make([]uint64, numMetrics)
+
+			for m := uint64(0); m < numMetrics; m++ {
+				mid := uint64(0)
+				val := uint64(0)
+				err, i, mid = decodeVarUint(data, i)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				err, i, val = decodeVarUint(data, i)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				vals[m] = val
+				log.Printf("metric[%d]: %d\n", mid, vals[m])
+			}
+		} else {
+			fmt.Println(fmt.Errorf("Unknown method %d", method))
+		}
 	}
-	return nil
 }
 
-func ConsumeXbeeFrames(frameSource chan XbeeFrame) {
+
+func ConsumeXbeeFrames(frameSource chan XbeeFrame, applicationMessages chan RawApplicationMessage) {
 	for {
 		frame := <-frameSource
 		data := frame.payload
@@ -313,9 +331,9 @@ func ConsumeXbeeFrames(frameSource chan XbeeFrame) {
 				payload[i] = data[i+5]
 			}
 
-			err := HandlePacket(payload, senderAddr)
-			if err != nil {
-				log.Println(err)
+			applicationMessages <- RawApplicationMessage{
+				payload: payload,
+				sender: senderAddr,
 			}
 		} else {
 			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
@@ -337,9 +355,13 @@ func main() {
 	log.Printf("Opened '%s'\n", serialPort)
 
 	xbeeFrames := make(chan XbeeFrame)
-	buf := make([]byte, 128)
+	applicationMessages := make(chan RawApplicationMessage)
+
 	accum := NewAccum(xbeeFrames)
-	go ConsumeXbeeFrames(xbeeFrames)
+	go ConsumeXbeeFrames(xbeeFrames, applicationMessages)
+	go HandleApplicationMessages(applicationMessages)
+
+	buf := make([]byte, 128)
 
 	// ND doesn't work
 	f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
