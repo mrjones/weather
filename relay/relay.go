@@ -41,6 +41,34 @@ type XbeeFrame struct {
 	checksum uint8
 }
 
+func NewXbeeFrame(payload []byte) *XbeeFrame {
+	length := len(payload)
+	sum := uint8(0)
+	for i := 0; i < length; i++ {
+		sum = (sum + uint8(payload[i])) & 0xFF
+	}
+	checksum := 0xFF - sum
+
+	return &XbeeFrame{
+		length:   uint16(length),
+		payload:  payload,
+		checksum: checksum,
+	}
+}
+
+func (f *XbeeFrame) Serialize() []byte {
+	data := make([]byte, f.length+4)
+	data[0] = 0x7E
+	data[1] = byte(f.length >> 8)
+	data[2] = byte(f.length & 0xFF)
+	for i := uint16(0); i < f.length; i++ {
+		data[3+i] = f.payload[i]
+	}
+	data[f.length+3] = f.checksum
+	return data
+}
+
+
 type Accum struct {
 	state                int
 	bytesConsumedInState uint16
@@ -174,33 +202,6 @@ func (a *Accum) getSync(data []byte, offset int, len int) (int, error) {
 	}
 
 	return 1, nil
-}
-
-func NewFrame(payload []byte) *XbeeFrame {
-	length := len(payload)
-	sum := uint8(0)
-	for i := 0; i < length; i++ {
-		sum = (sum + uint8(payload[i])) & 0xFF
-	}
-	checksum := 0xFF - sum
-
-	return &XbeeFrame{
-		length:   uint16(length),
-		payload:  payload,
-		checksum: checksum,
-	}
-}
-
-func (f *XbeeFrame) Serialize() []byte {
-	data := make([]byte, f.length+4)
-	data[0] = 0x7E
-	data[1] = byte(f.length >> 8)
-	data[2] = byte(f.length & 0xFF)
-	for i := uint16(0); i < f.length; i++ {
-		data[3+i] = f.payload[i]
-	}
-	data[f.length+3] = f.checksum
-	return data
 }
 
 func configureSerial(file *os.File) {
@@ -357,8 +358,7 @@ func main() {
 
 	buf := make([]byte, 128)
 
-	// ND doesn't work
-	f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
+	f := NewXbeeFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
 	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
 	wn, err := file.Write(f.Serialize())
