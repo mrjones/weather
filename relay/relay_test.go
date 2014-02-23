@@ -158,3 +158,27 @@ func TestConsumeXbeeFrame(t *testing.T) {
 			options: 0x01,
 		}, actual, t)
 }
+
+func TestIgnoresUnknownFrames(t *testing.T) {
+	frames := make(chan *XbeeFrame, 1)
+	rxPackets := make(chan *DataPacket, 1)
+
+	go ConsumeXbeeFrames(frames, rxPackets)
+
+	frames <- &XbeeFrame{
+		length: 4,
+		payload: []byte{0xEE, 0x12, 0x34, 0x56},
+		checksum: 0x00}
+
+	close(frames)
+
+	packet, ok := <- rxPackets
+
+	if packet != nil {
+		t.Errorf("Got an unexpected packet after reading a garbage frame")
+	}
+
+	if ok {
+		t.Errorf("Got an unexpected packet after reading a garbage frame")
+	}
+}

@@ -313,7 +313,11 @@ func HandleReceivedPackets(rxPackets chan *DataPacket) {
 
 func ConsumeXbeeFrames(frameSource chan *XbeeFrame, rxPackets chan *DataPacket) {
 	for {
-		frame := <-frameSource
+		frame, ok := <-frameSource
+		if !ok { // shutting down
+			close(rxPackets)
+			return
+		}
 		data := frame.payload
 		if data[0] == RX_PACKET_16BIT {
 			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
