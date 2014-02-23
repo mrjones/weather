@@ -30,7 +30,7 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
-type RawApplicationMessage struct {
+type DataPacket struct {
 	payload []byte
 	sender  uint16
 }
@@ -247,9 +247,9 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleApplicationMessages(messages chan *RawApplicationMessage) {
+func HandleReceivedPackets(rxPackets chan *DataPacket) {
 	for {
-		message := <-messages
+		message := <-rxPackets
 		data := message.payload
 		sender := message.sender
 
@@ -309,7 +309,7 @@ func HandleApplicationMessages(messages chan *RawApplicationMessage) {
 	}
 }
 
-func ConsumeXbeeFrames(frameSource chan *XbeeFrame, applicationMessages chan *RawApplicationMessage) {
+func ConsumeXbeeFrames(frameSource chan *XbeeFrame, rxPackets chan *DataPacket) {
 	for {
 		frame := <-frameSource
 		data := frame.payload
@@ -326,7 +326,7 @@ func ConsumeXbeeFrames(frameSource chan *XbeeFrame, applicationMessages chan *Ra
 				payload[i] = data[i+5]
 			}
 
-			applicationMessages <- &RawApplicationMessage{
+			rxPackets <- &DataPacket{
 				payload: payload,
 				sender:  senderAddr,
 			}
@@ -350,11 +350,11 @@ func main() {
 	log.Printf("Opened '%s'\n", serialPort)
 
 	xbeeFrames := make(chan *XbeeFrame)
-	applicationMessages := make(chan *RawApplicationMessage)
+	rxPackets := make(chan *DataPacket)
 
 	accum := NewAccum(xbeeFrames)
-	go ConsumeXbeeFrames(xbeeFrames, applicationMessages)
-	go HandleApplicationMessages(applicationMessages)
+	go ConsumeXbeeFrames(xbeeFrames, rxPackets)
+	go HandleReceivedPackets(rxPackets)
 
 	buf := make([]byte, 128)
 
