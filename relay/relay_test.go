@@ -119,6 +119,16 @@ func TestVerifiesChecksum(t *testing.T) {
 
 // ===============
 
+func PacketsEq(expected, actual *DataPacket, t *testing.T) {
+	if expected.sender != actual.sender {
+		t.Errorf("DataPackets don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
+	}
+	
+	if bytes.Compare(expected.payload, actual.payload) != 0 {
+		t.Errorf("DataPackets don't match in 'payload' param.\nExpected: '%s'.\nActual: '%s'.", arrayAsHex(expected.payload), arrayAsHex(actual.payload))
+	}
+}
+
 func TestConsumeXbeeFrame(t *testing.T) {
 	frames := make(chan *XbeeFrame, 1)
 	rxPackets := make(chan *DataPacket, 1)
@@ -130,9 +140,11 @@ func TestConsumeXbeeFrame(t *testing.T) {
 		payload: []byte{0x81, 0x22, 0x22, 0x28, 0x00, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
-	packet := <- rxPackets
+	actual := <- rxPackets
 
-	if packet.sender != 0x2222 {
-		t.Errorf("Didn't parse sender properly. Expected: 0x%x. Actual: 0x%x.", 0x2222, packet.sender)
-	}
+	PacketsEq(
+		&DataPacket{
+			sender: 0x2222,
+			payload: []byte{0x12, 0x34, 0x56},
+		}, actual, t)
 }
