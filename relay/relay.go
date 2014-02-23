@@ -82,25 +82,27 @@ func NewAccum(frameSink chan XbeeFrame) *Accum {
 	return a
 }
 
-func (a *Accum) Consume(data []byte, offset int, len int) error {
-	if offset >= len {
-		return nil
+func (a *Accum) Consume(data []byte, offset int, length int) error {
+	if offset + length > len(data) {
+		return fmt.Errorf("Can't consume bytes %d to %d. Array length is %d.",
+			offset, offset + length, len(data))
 	}
 
-	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, len))
+
+	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, length))
 
 	for {
 		var err error
 		n := 0
 		switch a.state {
 		case STATE_OUT_OF_SYNC:
-			n, err = a.getSync(data, offset, len)
+			n, err = a.getSync(data, offset, length)
 		case STATE_FOUND_FRAME_DELIMITER:
-			n, err = a.parseLength(data, offset, len)
+			n, err = a.parseLength(data, offset, length)
 		case STATE_PARSED_LENGTH:
-			n, err = a.copyPayload(data, offset, len)
+			n, err = a.copyPayload(data, offset, length)
 		case STATE_CONSUMED_PAYLOAD:
-			n, err = a.verifyChecksum(data, offset, len)
+			n, err = a.verifyChecksum(data, offset, length)
 		default:
 			return fmt.Errorf("Internal Error. Unknown state: %d", a.state)
 		}
@@ -111,11 +113,11 @@ func (a *Accum) Consume(data []byte, offset int, len int) error {
 
 		offset += n
 
-		if offset == len {
+		if offset == length {
 			return nil
-		} else if offset > len {
+		} else if offset > length {
 			return fmt.Errorf("Internal Error. Buffer overrun (%d > %d)",
-				offset, len)
+				offset, length)
 		}
 	}
 }
@@ -136,9 +138,9 @@ func arrayAsHex(a []byte) string {
 	return arrayAsHexWithLen(a, len(a))
 }
 
-func arrayAsHexWithLen(a []byte, len int) string {
+func arrayAsHexWithLen(a []byte, length int) string {
 	s := "[ "
-	for i := 0; i < len; i++ {
+	for i := 0; i < length; i++ {
 		s += fmt.Sprintf("0x%x ", a[i])
 	}
 	s += "]"

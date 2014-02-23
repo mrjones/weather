@@ -92,3 +92,28 @@ func TestConsumeTwoMessages(t *testing.T) {
 		}, actual2, t);
 }
 
+func TestBoundsChecking(t *testing.T) {
+	output := make(chan XbeeFrame, 0)
+	accum := NewAccum(output)
+
+	err := accum.Consume([]byte{0x7e}, 1, 1)
+	if err == nil {
+		t.Errorf("Didn't detect starting past end of array")
+	}
+
+	err = accum.Consume([]byte{0x7e}, 0, 2)
+	if err == nil {
+		t.Errorf("Didn't detect going past end of array")
+	}
+}
+
+func TestVerifiesChecksum(t *testing.T) {
+	output := make(chan XbeeFrame, 0)
+	accum := NewAccum(output)
+
+	err := accum.Consume([]byte{0x7e, 0x00, 0x01, 0x12, 0x00}, 0, 5)
+	if err == nil {
+		t.Errorf("Didn't detect invalid checksum.")
+	}
+}
+
