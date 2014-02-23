@@ -39,10 +39,10 @@ type DataPacket struct {
 
 func (d *DataPacket) DebugString() string {
 	return fmt.Sprintf(
-		"RSSI:    -%d dBm\n" +
-		"Sender:  0x%x\n" +
-		"Options: 0x%x\n" +
-		"Payload: %x\n",
+		"RSSI:    -%d dBm\n"+
+			"Sender:  0x%x\n"+
+			"Options: 0x%x\n"+
+			"Payload: %x\n",
 		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
 }
 
@@ -94,9 +94,9 @@ func NewAccum(frameSink chan<- *XbeeFrame) *Accum {
 }
 
 func (a *Accum) Consume(data []byte, offset int, length int) error {
-	if offset + length > len(data) {
+	if offset+length > len(data) {
 		return fmt.Errorf("Can't consume bytes [%d,%d). Array length is %d.",
-			offset, offset + length, len(data))
+			offset, offset+length, len(data))
 	}
 
 	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, length))
@@ -331,7 +331,7 @@ func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPack
 
 		data := frame.payload
 		if data[0] == RX_PACKET_16BIT {
-			if (len(data) < 5) {
+			if len(data) < 5 {
 				log.Printf("Malformed packet (too short, length = %d).", len(data))
 				continue
 			}
@@ -345,10 +345,10 @@ func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPack
 			packet := &DataPacket{
 				payload: payload,
 				sender:  senderAddr,
-				rssi: uint8(data[3]),
+				rssi:    uint8(data[3]),
 				options: data[4],
 			}
-			log.Printf("%s", packet.DebugString())	
+			log.Printf("%s", packet.DebugString())
 			rxPackets <- packet
 		} else {
 			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))

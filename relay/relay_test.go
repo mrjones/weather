@@ -36,10 +36,10 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 
 	FramesEq(
 		&XbeeFrame{
-			length: 3,
-			payload: []byte {0x12, 0x34, 0x56},
+			length:   3,
+			payload:  []byte{0x12, 0x34, 0x56},
 			checksum: 0x63,
-		}, actual, t);
+		}, actual, t)
 }
 
 func TestConsumeMessageByteByByte(t *testing.T) {
@@ -58,10 +58,10 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 
 	FramesEq(
 		&XbeeFrame{
-			length: 3,
-			payload: []byte {0x12, 0x34, 0x56},
+			length:   3,
+			payload:  []byte{0x12, 0x34, 0x56},
 			checksum: 0x63,
-		}, actual, t);
+		}, actual, t)
 }
 
 func TestConsumeTwoMessages(t *testing.T) {
@@ -77,19 +77,19 @@ func TestConsumeTwoMessages(t *testing.T) {
 
 	FramesEq(
 		&XbeeFrame{
-			length: 3,
-			payload: []byte {0x12, 0x34, 0x56},
+			length:   3,
+			payload:  []byte{0x12, 0x34, 0x56},
 			checksum: 0x63,
-		}, actual1, t);
+		}, actual1, t)
 
 	actual2 := <-output
 
 	FramesEq(
 		&XbeeFrame{
-			length: 4,
-			payload: []byte {0x12, 0x34, 0x56, 0x78},
+			length:   4,
+			payload:  []byte{0x12, 0x34, 0x56, 0x78},
 			checksum: 0xEB,
-		}, actual2, t);
+		}, actual2, t)
 }
 
 func TestBoundsChecking(t *testing.T) {
@@ -123,7 +123,7 @@ func PacketsEq(expected, actual *DataPacket, t *testing.T) {
 	if expected.sender != actual.sender {
 		t.Errorf("DataPackets don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
 	}
-	
+
 	if bytes.Compare(expected.payload, actual.payload) != 0 {
 		t.Errorf("DataPackets don't match in 'payload' param.\nExpected: '%s'.\nActual: '%s'.", arrayAsHex(expected.payload), arrayAsHex(actual.payload))
 	}
@@ -144,17 +144,17 @@ func TestConsumeRxFrame(t *testing.T) {
 	go ConsumeXbeeFrames(frames, rxPackets)
 
 	frames <- &XbeeFrame{
-		length: 8,
-		payload: []byte{0x81, 0x22, 0x22, 0x28, 0x01, 0x12, 0x34, 0x56},
+		length:   8,
+		payload:  []byte{0x81, 0x22, 0x22, 0x28, 0x01, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
-	actual := <- rxPackets
+	actual := <-rxPackets
 
 	PacketsEq(
 		&DataPacket{
-			sender: 0x2222,
+			sender:  0x2222,
 			payload: []byte{0x12, 0x34, 0x56},
-			rssi: 0x28,
+			rssi:    0x28,
 			options: 0x01,
 		}, actual, t)
 }
@@ -166,13 +166,13 @@ func TestMalformedRxFrame_TooShort(t *testing.T) {
 	go ConsumeXbeeFrames(frames, rxPackets)
 
 	frames <- &XbeeFrame{
-		length: 4,
-		payload: []byte{0x81, 0x12, 0x34, 0x56},
+		length:   4,
+		payload:  []byte{0x81, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
 	close(frames)
 
-	packet, ok := <- rxPackets
+	packet, ok := <-rxPackets
 
 	if packet != nil {
 		t.Errorf("Got an unexpected packet while processing a malformed frame")
@@ -190,13 +190,13 @@ func TestIgnoresUnknownFrames(t *testing.T) {
 	go ConsumeXbeeFrames(frames, rxPackets)
 
 	frames <- &XbeeFrame{
-		length: 4,
-		payload: []byte{0xEE, 0x12, 0x34, 0x56},
+		length:   4,
+		payload:  []byte{0xEE, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
 	close(frames)
 
-	packet, ok := <- rxPackets
+	packet, ok := <-rxPackets
 
 	if packet != nil {
 		t.Errorf("Got an unexpected packet after reading a garbage frame")
