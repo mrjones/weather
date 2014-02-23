@@ -121,6 +121,7 @@ func (a *Accum) Consume(data []byte, offset int, len int) error {
 }
 
 func (a *Accum) transition(state int) {
+	fmt.Printf("Transitioning to %d\n", state)
 	a.state = state
 	a.bytesConsumedInState = 0
 }
@@ -155,6 +156,7 @@ func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	v = (v + int(a.currentFrame.checksum)) & 0xFF
 
 	if v == 0xFF {
+		fmt.Println("Valid checksum! Sending frame")
 		a.frameSink <- a.currentFrame
 		a.reset()
 	} else {
