@@ -30,19 +30,19 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
-type DataPacket struct {
+type RxPacket struct {
 	payload []byte
 	sender  uint16
 	rssi    uint8
 	options byte
 }
 
-func (d *DataPacket) DebugString() string {
+func (d *RxPacket) DebugString() string {
 	return fmt.Sprintf(
 		"RSSI:    -%d dBm\n"+
 			"Sender:  0x%x\n"+
 			"Options: 0x%x\n"+
-			"Payload: %x\n",
+			"Payload: %s\n",
 		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
 }
 
@@ -258,7 +258,7 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleReceivedPackets(rxPackets <-chan *DataPacket) {
+func HandleReceivedPackets(rxPackets <-chan *RxPacket) {
 	for {
 		message := <-rxPackets
 		data := message.payload
@@ -320,7 +320,7 @@ func HandleReceivedPackets(rxPackets <-chan *DataPacket) {
 	}
 }
 
-func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPacket) {
+func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *RxPacket) {
 	for {
 		frame, ok := <-frameSource
 		if !ok {
@@ -342,7 +342,7 @@ func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPack
 				payload[i] = data[i+5]
 			}
 
-			packet := &DataPacket{
+			packet := &RxPacket{
 				payload: payload,
 				sender:  senderAddr,
 				rssi:    uint8(data[3]),
@@ -370,7 +370,7 @@ func main() {
 	log.Printf("Opened '%s'\n", serialPort)
 
 	xbeeFrames := make(chan *XbeeFrame)
-	rxPackets := make(chan *DataPacket)
+	rxPackets := make(chan *RxPacket)
 
 	accum := NewAccum(xbeeFrames)
 	go ConsumeXbeeFrames(xbeeFrames, rxPackets)

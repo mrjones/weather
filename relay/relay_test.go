@@ -119,27 +119,27 @@ func TestVerifiesChecksum(t *testing.T) {
 
 // ===============
 
-func PacketsEq(expected, actual *DataPacket, t *testing.T) {
+func PacketsEq(expected, actual *RxPacket, t *testing.T) {
 	if expected.sender != actual.sender {
-		t.Errorf("DataPackets don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
+		t.Errorf("RxPackets don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
 	}
 
 	if bytes.Compare(expected.payload, actual.payload) != 0 {
-		t.Errorf("DataPackets don't match in 'payload' param.\nExpected: '%s'.\nActual: '%s'.", arrayAsHex(expected.payload), arrayAsHex(actual.payload))
+		t.Errorf("RxPackets don't match in 'payload' param.\nExpected: '%s'.\nActual: '%s'.", arrayAsHex(expected.payload), arrayAsHex(actual.payload))
 	}
 
 	if expected.rssi != actual.rssi {
-		t.Errorf("DataPackets don't match in 'rssi' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.rssi, actual.rssi)
+		t.Errorf("RxPackets don't match in 'rssi' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.rssi, actual.rssi)
 	}
 
 	if expected.options != actual.options {
-		t.Errorf("DataPackets don't match in 'options' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.options, actual.options)
+		t.Errorf("RxPackets don't match in 'options' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.options, actual.options)
 	}
 }
 
 func TestConsumeRxFrame(t *testing.T) {
 	frames := make(chan *XbeeFrame, 1)
-	rxPackets := make(chan *DataPacket, 1)
+	rxPackets := make(chan *RxPacket, 1)
 
 	go ConsumeXbeeFrames(frames, rxPackets)
 
@@ -151,7 +151,7 @@ func TestConsumeRxFrame(t *testing.T) {
 	actual := <-rxPackets
 
 	PacketsEq(
-		&DataPacket{
+		&RxPacket{
 			sender:  0x2222,
 			payload: []byte{0x12, 0x34, 0x56},
 			rssi:    0x28,
@@ -161,7 +161,7 @@ func TestConsumeRxFrame(t *testing.T) {
 
 func TestMalformedRxFrame_TooShort(t *testing.T) {
 	frames := make(chan *XbeeFrame, 1)
-	rxPackets := make(chan *DataPacket, 1)
+	rxPackets := make(chan *RxPacket, 1)
 
 	go ConsumeXbeeFrames(frames, rxPackets)
 
@@ -185,7 +185,7 @@ func TestMalformedRxFrame_TooShort(t *testing.T) {
 
 func TestIgnoresUnknownFrames(t *testing.T) {
 	frames := make(chan *XbeeFrame, 1)
-	rxPackets := make(chan *DataPacket, 1)
+	rxPackets := make(chan *RxPacket, 1)
 
 	go ConsumeXbeeFrames(frames, rxPackets)
 
