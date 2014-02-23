@@ -30,22 +30,25 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
-type XbeeFrame struct {
-	payload []byte
-}
-
 type RawApplicationMessage struct {
 	payload []byte
 	sender uint16
 }
 
+type XbeeFrame struct {
+	length uint16
+	payload []byte
+	checksum uint8
+}
+
 type Accum struct {
 	state                int
-	bytesConsumedInState int
-	payloadLength        int
-	payload              []byte
-	checksum             int
+	bytesConsumedInState uint16
+//	payloadLength        int
+//	payload              []byte
+//	checksum             int
 
+	currentFrame XbeeFrame
 	frameSink chan XbeeFrame
 }
 
@@ -99,8 +102,8 @@ func (a *Accum) transition(state int) {
 }
 
 func (a *Accum) reset() {
-	a.payloadLength = 0
-	a.checksum = 0
+	a.currentFrame.length = 0
+	a.currentFrame.checksum = 0
 	a.transition(STATE_OUT_OF_SYNC)
 }
 
@@ -118,17 +121,17 @@ func arrayAsHexWithLen(a []byte, len int) string {
 }
 
 func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
-	a.checksum = int(data[offset])
+	a.currentFrame.checksum = uint8(data[offset])
 
 	v := 0
-	for i := 0; i < a.payloadLength; i++ {
-		v = (v + int(a.payload[i])) & 0xFF
+	for i := uint16(0); i < a.currentFrame.length; i++ {
+		v = (v + int(a.currentFrame.payload[i])) & 0xFF
 	}
 
-	v = (v + a.checksum) & 0xFF
+	v = (v + int(a.currentFrame.checksum)) & 0xFF
 
 	if v == 0xFF {
-		a.frameSink <- XbeeFrame{payload: a.payload}
+		a.frameSink <- a.currentFrame
 		a.reset()
 	} else {
 		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
@@ -139,18 +142,18 @@ func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 
 func (a *Accum) copyPayload(data []byte, offset int, len int) (int, error) {
 	if a.bytesConsumedInState == 0 {
-		a.payload = make([]byte, a.payloadLength)
+		a.currentFrame.payload = make([]byte, a.currentFrame.length)
 	}
 
 	consumed := 0
-	for offset < len && a.bytesConsumedInState < a.payloadLength {
-		a.payload[a.bytesConsumedInState] = data[offset]
+	for offset < len && a.bytesConsumedInState < a.currentFrame.length {
+		a.currentFrame.payload[a.bytesConsumedInState] = data[offset]
 		offset++
 		a.bytesConsumedInState++
 		consumed++
 	}
 
-	if a.bytesConsumedInState == a.payloadLength {
+	if a.bytesConsumedInState == a.currentFrame.length {
 		a.transition(STATE_CONSUMED_PAYLOAD)
 	}
 
@@ -158,7 +161,7 @@ func (a *Accum) copyPayload(data []byte, offset int, len int) (int, error) {
 }
 
 func (a *Accum) parseLength(data []byte, offset int, len int) (int, error) {
-	a.payloadLength = (a.payloadLength << 8) + int(data[offset])
+	a.currentFrame.length = (a.currentFrame.length << 8) + uint16(data[offset])
 	a.bytesConsumedInState++
 
 	if a.bytesConsumedInState == LENGTH_BYTES {
@@ -258,7 +261,7 @@ func HandleApplicationMessages(messages chan RawApplicationMessage) {
 		sender := message.sender
 
 		log.Printf("Payload: %s\n", arrayAsHex(data))
-		log.Printf("Sender:  %d\n", sender)
+		log.Printf("Sender:  0x%x\n", sender)
 		i := uint(0)
 
 		err, i, protocolVersion := decodeVarUint(data, i)
