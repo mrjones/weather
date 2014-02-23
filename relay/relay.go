@@ -314,12 +314,18 @@ func HandleReceivedPackets(rxPackets <-chan *DataPacket) {
 func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPacket) {
 	for {
 		frame, ok := <-frameSource
-		if !ok { // shutting down
+		if !ok {
+			log.Printf("ConsumeXbeeFrames shutting down.")
 			close(rxPackets)
 			return
 		}
+
 		data := frame.payload
 		if data[0] == RX_PACKET_16BIT {
+			if (len(data) < 5) {
+				log.Printf("Malformed packet (too short, length = %d).", len(data))
+				continue
+			}
 			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
 			strength := int(data[3])
 			options := int(data[4])

@@ -137,7 +137,7 @@ func PacketsEq(expected, actual *DataPacket, t *testing.T) {
 	}
 }
 
-func TestConsumeXbeeFrame(t *testing.T) {
+func TestConsumeRxFrame(t *testing.T) {
 	frames := make(chan *XbeeFrame, 1)
 	rxPackets := make(chan *DataPacket, 1)
 
@@ -157,6 +157,30 @@ func TestConsumeXbeeFrame(t *testing.T) {
 			rssi: 0x28,
 			options: 0x01,
 		}, actual, t)
+}
+
+func TestMalformedRxFrame_TooShort(t *testing.T) {
+	frames := make(chan *XbeeFrame, 1)
+	rxPackets := make(chan *DataPacket, 1)
+
+	go ConsumeXbeeFrames(frames, rxPackets)
+
+	frames <- &XbeeFrame{
+		length: 4,
+		payload: []byte{0x81, 0x12, 0x34, 0x56},
+		checksum: 0x00}
+
+	close(frames)
+
+	packet, ok := <- rxPackets
+
+	if packet != nil {
+		t.Errorf("Got an unexpected packet while processing a malformed frame")
+	}
+
+	if ok {
+		t.Errorf("Got an unexpected packet while processing a malformed frame")
+	}
 }
 
 func TestIgnoresUnknownFrames(t *testing.T) {
