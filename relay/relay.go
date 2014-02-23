@@ -75,10 +75,10 @@ type Accum struct {
 	bytesConsumedInState uint16
 
 	currentFrame *XbeeFrame
-	frameSink    chan *XbeeFrame
+	frameSink    chan<- *XbeeFrame
 }
 
-func NewAccum(frameSink chan *XbeeFrame) *Accum {
+func NewAccum(frameSink chan<- *XbeeFrame) *Accum {
 	a := &Accum{frameSink: frameSink}
 	a.reset()
 	return a
@@ -249,7 +249,7 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleReceivedPackets(rxPackets chan *DataPacket) {
+func HandleReceivedPackets(rxPackets <-chan *DataPacket) {
 	for {
 		message := <-rxPackets
 		data := message.payload
@@ -311,7 +311,7 @@ func HandleReceivedPackets(rxPackets chan *DataPacket) {
 	}
 }
 
-func ConsumeXbeeFrames(frameSource chan *XbeeFrame, rxPackets chan *DataPacket) {
+func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *DataPacket) {
 	for {
 		frame, ok := <-frameSource
 		if !ok { // shutting down
