@@ -30,6 +30,10 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
+type XbeeFrame struct {
+	payload []byte
+}
+
 type Accum struct {
 	state                int
 	bytesConsumedInState int
@@ -37,11 +41,11 @@ type Accum struct {
 	payload              []byte
 	checksum             int
 
-	messages chan []byte
+	frameSink chan XbeeFrame
 }
 
-func NewAccum(messages chan []byte) *Accum {
-	a := &Accum{messages: messages}
+func NewAccum(frameSink chan XbeeFrame) *Accum {
+	a := &Accum{frameSink: frameSink}
 	a.reset()
 	return a
 }
@@ -119,7 +123,7 @@ func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	v = (v + a.checksum) & 0xFF
 
 	if v == 0xFF {
-		a.messages <- a.payload
+		a.frameSink <- XbeeFrame{payload: a.payload}
 		a.reset()
 	} else {
 		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
@@ -292,9 +296,10 @@ func HandlePacket(data []byte, sender uint16) error {
 	return nil
 }
 
-func ConsumeXbeeMessages(messages chan []byte) {
+func ConsumeXbeeMessages(messages chan XbeeFrame) {
 	for {
-		data := <-messages
+		frame := <-messages
+		data := frame.payload
 		if data[0] == RX_PACKET_16BIT {
 			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
 			strength := int(data[3])
@@ -331,7 +336,7 @@ func main() {
 
 	log.Printf("Opened '%s'\n", serialPort)
 
-	xbeeMessages := make(chan []byte)
+	xbeeMessages := make(chan XbeeFrame)
 	buf := make([]byte, 128)
 	accum := NewAccum(xbeeMessages)
 	go ConsumeXbeeMessages(xbeeMessages)
