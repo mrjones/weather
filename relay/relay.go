@@ -33,6 +33,8 @@ const (
 type DataPacket struct {
 	payload []byte
 	sender  uint16
+	rssi    uint8
+	options byte
 }
 
 type XbeeFrame struct {
@@ -329,6 +331,8 @@ func ConsumeXbeeFrames(frameSource chan *XbeeFrame, rxPackets chan *DataPacket) 
 			rxPackets <- &DataPacket{
 				payload: payload,
 				sender:  senderAddr,
+				rssi: uint8(data[3]),
+				options: data[4],
 			}
 		} else {
 			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))

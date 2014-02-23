@@ -127,6 +127,14 @@ func PacketsEq(expected, actual *DataPacket, t *testing.T) {
 	if bytes.Compare(expected.payload, actual.payload) != 0 {
 		t.Errorf("DataPackets don't match in 'payload' param.\nExpected: '%s'.\nActual: '%s'.", arrayAsHex(expected.payload), arrayAsHex(actual.payload))
 	}
+
+	if expected.rssi != actual.rssi {
+		t.Errorf("DataPackets don't match in 'rssi' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.rssi, actual.rssi)
+	}
+
+	if expected.options != actual.options {
+		t.Errorf("DataPackets don't match in 'options' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.options, actual.options)
+	}
 }
 
 func TestConsumeXbeeFrame(t *testing.T) {
@@ -137,7 +145,7 @@ func TestConsumeXbeeFrame(t *testing.T) {
 
 	frames <- &XbeeFrame{
 		length: 8,
-		payload: []byte{0x81, 0x22, 0x22, 0x28, 0x00, 0x12, 0x34, 0x56},
+		payload: []byte{0x81, 0x22, 0x22, 0x28, 0x01, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
 	actual := <- rxPackets
@@ -146,5 +154,7 @@ func TestConsumeXbeeFrame(t *testing.T) {
 		&DataPacket{
 			sender: 0x2222,
 			payload: []byte{0x12, 0x34, 0x56},
+			rssi: 0x28,
+			options: 0x01,
 		}, actual, t)
 }
