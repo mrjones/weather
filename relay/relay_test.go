@@ -65,11 +65,13 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 }
 
 func TestConsumeTwoMessages(t *testing.T) {
-	output := make(chan XbeeFrame, 1)
+	output := make(chan XbeeFrame, 2)
 	accum := NewAccum(output)
 
 	AssertNoError(accum.Consume(
 		[]byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}, 0, 7), t)
+	AssertNoError(accum.Consume(
+		[]byte{0x7e, 0x00, 0x04, 0x12, 0x34, 0x56, 0x78, 0xEB}, 0, 8), t)
 
 	actual1 := <-output
 
@@ -79,9 +81,6 @@ func TestConsumeTwoMessages(t *testing.T) {
 			payload: []byte {0x12, 0x34, 0x56},
 			checksum: 0x63,
 		}, actual1, t);
-
-	AssertNoError(accum.Consume(
-		[]byte{0x7e, 0x00, 0x04, 0x12, 0x34, 0x56, 0x78, 0xEB}, 0, 8), t)
 
 	actual2 := <-output
 
