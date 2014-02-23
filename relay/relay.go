@@ -247,7 +247,7 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleApplicationMessages(messages chan RawApplicationMessage) {
+func HandleApplicationMessages(messages chan *RawApplicationMessage) {
 	for {
 		message := <-messages
 		data := message.payload
@@ -309,7 +309,7 @@ func HandleApplicationMessages(messages chan RawApplicationMessage) {
 	}
 }
 
-func ConsumeXbeeFrames(frameSource chan *XbeeFrame, applicationMessages chan RawApplicationMessage) {
+func ConsumeXbeeFrames(frameSource chan *XbeeFrame, applicationMessages chan *RawApplicationMessage) {
 	for {
 		frame := <-frameSource
 		data := frame.payload
@@ -326,7 +326,7 @@ func ConsumeXbeeFrames(frameSource chan *XbeeFrame, applicationMessages chan Raw
 				payload[i] = data[i+5]
 			}
 
-			applicationMessages <- RawApplicationMessage{
+			applicationMessages <- &RawApplicationMessage{
 				payload: payload,
 				sender:  senderAddr,
 			}
@@ -350,7 +350,7 @@ func main() {
 	log.Printf("Opened '%s'\n", serialPort)
 
 	xbeeFrames := make(chan *XbeeFrame)
-	applicationMessages := make(chan RawApplicationMessage)
+	applicationMessages := make(chan *RawApplicationMessage)
 
 	accum := NewAccum(xbeeFrames)
 	go ConsumeXbeeFrames(xbeeFrames, applicationMessages)

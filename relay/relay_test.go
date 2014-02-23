@@ -117,3 +117,22 @@ func TestVerifiesChecksum(t *testing.T) {
 	}
 }
 
+// ===============
+
+func TestConsumeXbeeFrame(t *testing.T) {
+	frames := make(chan *XbeeFrame, 1)
+	appMessages := make(chan *RawApplicationMessage, 1)
+
+	go ConsumeXbeeFrames(frames, appMessages)
+
+	frames <- &XbeeFrame{
+		length: 8,
+		payload: []byte{0x81, 0x22, 0x22, 0x28, 0x00, 0x12, 0x34, 0x56},
+		checksum: 0x00}
+
+	message := <- appMessages
+
+	if message.sender != 0x2222 {
+		t.Errorf("Didn't parse sender properly. Expected: 0x%x. Actual: 0x%x.", 0x2222, message.sender)
+	}
+}
