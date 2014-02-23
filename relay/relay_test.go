@@ -247,3 +247,99 @@ func TestMetricReport(t *testing.T) {
 			metrics: map[uint64]int64 {1: 3, 2: 4},
 		}, actual, t)
 }
+
+func TestMalformedMetricReport(t *testing.T) {
+	packets := make(chan *RxPacket, 1)
+	reports := make(chan *ReportMetricsMessage, 1)
+
+	go HandleReceivedPackets(packets, reports)
+
+	packets <- &RxPacket{
+		payload: []byte {0x1},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	close(packets)
+
+	report, ok := <-reports
+
+	if report != nil || ok {
+		t.Errorf("Got an unexpected report after processing garbage.")
+	}	
+}
+
+func TestUnsupportedProtocolVersion(t *testing.T) {
+	packets := make(chan *RxPacket, 1)
+	reports := make(chan *ReportMetricsMessage, 1)
+
+	go HandleReceivedPackets(packets, reports)
+
+	packets <- &RxPacket{
+		payload: []byte {0x1, 0x2, 0x1, 0x1},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	close(packets)
+
+	report, ok := <-reports
+
+	if report != nil || ok {
+		t.Errorf("Got an unexpected report when protocol version was too new.")
+	}	
+}
+
+func TestUnknownMethod(t *testing.T) {
+	packets := make(chan *RxPacket, 1)
+	reports := make(chan *ReportMetricsMessage, 1)
+
+	go HandleReceivedPackets(packets, reports)
+
+	packets <- &RxPacket{
+		payload: []byte {0x1, 0x1, 0x1, 0xFF},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	close(packets)
+
+	report, ok := <-reports
+
+	if report != nil || ok {
+		t.Errorf("Got an unexpected report when the method id was bogus.")
+	}	
+}
+
+func TestReadMessageAfterError(t *testing.T) {
+	packets := make(chan *RxPacket, 1)
+	reports := make(chan *ReportMetricsMessage, 1)
+
+	go HandleReceivedPackets(packets, reports)
+
+	packets <- &RxPacket{
+		payload: []byte {0x1, 0x1, 0x1, 0xFF},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	packets <- &RxPacket{
+		payload: []byte {0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0xA, 0x1, 0xB},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	actual := <-reports
+
+	ReportsEq(
+		&ReportMetricsMessage{
+			sender: 0x2222,
+			metrics: map[uint64]int64 {10: 11},
+		}, actual, t)
+}
+
