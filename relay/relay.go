@@ -210,66 +210,22 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket, metricReports chan<- *Rep
 	}
 }
 
-func ConsumeXbeeFrames(frameSource <-chan *XbeeFrame, rxPackets chan<- *RxPacket) {
-	for {
-		frame, ok := <-frameSource
-		if !ok {
-			log.Printf("ConsumeXbeeFrames shutting down.")
-			close(rxPackets)
-			return
-		}
-
-		data := frame.payload
-		if data[0] == RX_PACKET_16BIT {
-			if len(data) < 5 {
-				log.Printf("Malformed packet (too short, length = %d).", len(data))
-				continue
-			}
-			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
-			payloadLength := len(data) - 5
-			var payload = make([]byte, payloadLength)
-			for i := 0; i < payloadLength; i++ {
-				payload[i] = data[i+5]
-			}
-
-			packet := &RxPacket{
-				payload: payload,
-				sender:  senderAddr,
-				rssi:    uint8(data[3]),
-				options: data[4],
-			}
-			log.Printf("%s", packet.DebugString())
-			rxPackets <- packet
-		} else {
-			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
-		}
-	}
-}
-
 func main() {
-	serialPort := "/dev/ttyAMA0"
-
-	file, err := os.OpenFile(
-		serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
-
+	serialPort, err := NewSerialConnection("/dev/ttyAMA0")
 	if err != nil {
 		log.Fatal(err)
 	}
-	configureSerial(file)
 
-	log.Printf("Opened '%s'\n", serialPort)
+	xbee := NewXbeeConnection(serialPort);
 
-	xbeeFrames := make(chan *XbeeFrame)
-	rxPackets := make(chan *RxPacket)
 	metricReports := make(chan *ReportMetricsMessage)
 	metricRegistrations := make(chan *RegisterMetricsMessage)
 
-	accum := NewAccum(xbeeFrames)
-	go ConsumeXbeeFrames(xbeeFrames, rxPackets)
-	go HandleReceivedPackets(rxPackets, metricReports, metricRegistrations)
+	go HandleReceivedPackets(
+		xbee.RxData(), metricReports, metricRegistrations)
 	go HandleReportedMetrics(metricReports)
 
-	buf := make([]byte, 128)
+	/*
 
 	f := NewXbeeFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
 	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
@@ -280,17 +236,8 @@ func main() {
 	} else {
 		log.Printf("Write %d bytes\n", wn)
 	}
+*/
 
-	for {
-		n, err := file.Read(buf)
-		log.Printf("Read %d bytes\n", n)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = accum.Consume(buf, 0, n)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
+	shutdown := make(chan bool)
+	<-shutdown
 }

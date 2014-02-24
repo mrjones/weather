@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 )
 
 const (
@@ -23,6 +24,87 @@ const (
 	STATE_CONSUMED_PAYLOAD      = iota
 	STATE_MESSAGE_DONE          = iota
 )
+
+
+type XbeeConnection struct {
+	rxData chan *RxPacket
+	accum *Accum
+	serial *SerialConnection
+	xbeeFrames chan *XbeeFrame
+}
+
+func NewXbeeConnection(serial *SerialConnection) *XbeeConnection {
+	frameChan := make(chan *XbeeFrame)
+	connection := &XbeeConnection{
+		rxData: make(chan *RxPacket),
+		accum: NewAccum(frameChan),
+		serial: serial,
+		xbeeFrames: frameChan,
+	}
+
+	go connection.readFromSerialLoop()
+	go connection.processIncomingFrames()
+
+	return connection
+}
+
+func (x *XbeeConnection) processIncomingFrames() {
+	for {
+		frame, ok := <-x.xbeeFrames
+		if !ok {
+			log.Printf("processIncomingFrames shutting down.")
+			close(x.rxData)
+			return
+		}
+
+		data := frame.payload
+		if data[0] == RX_PACKET_16BIT {
+			if len(data) < 5 {
+				log.Printf("Malformed packet (too short, length = %d).", len(data))
+				continue
+			}
+			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
+			payloadLength := len(data) - 5
+			var payload = make([]byte, payloadLength)
+			for i := 0; i < payloadLength; i++ {
+				payload[i] = data[i+5]
+			}
+
+			packet := &RxPacket{
+				payload: payload,
+				sender:  senderAddr,
+				rssi:    uint8(data[3]),
+				options: data[4],
+			}
+			log.Printf("%s", packet.DebugString())
+			x.rxData <- packet
+		} else {
+			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
+		}
+	}
+
+}
+
+func (x *XbeeConnection) readFromSerialLoop() {
+	buf := make([]byte, 128)
+
+	for {
+		n, err := x.serial.file.Read(buf)
+		log.Printf("Read %d bytes\n", n)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = x.accum.Consume(buf, 0, n)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func (x *XbeeConnection) RxData() <-chan *RxPacket {
+	return x.rxData
+}
 
 type RxPacket struct {
 	payload []byte
