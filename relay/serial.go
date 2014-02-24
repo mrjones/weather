@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"syscall"
+	"unsafe"
 )
 
 type SerialConnection struct {

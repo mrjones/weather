@@ -5,9 +5,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"syscall"
-	"unsafe"
 )
 
 const (
