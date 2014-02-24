@@ -22,6 +22,7 @@ const (
 	AT_COMMAND = 0x08
 
 	REPORT_METRICS_MESSAGE_TYPE = 1
+	REGISTER_METRICS_MESSAGE_TYPE = 2
 )
 
 const (
@@ -31,6 +32,11 @@ const (
 	STATE_CONSUMED_PAYLOAD      = iota
 	STATE_MESSAGE_DONE          = iota
 )
+
+type RegisterMetricsMessage struct {
+	sender uint16
+	metricNames []string
+}
 
 type ReportMetricsMessage struct {
 	sender  uint16
@@ -278,9 +284,9 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleReportedMetrics(reportedMetrics <-chan *ReportMetricsMessage) {
+func HandleReportedMetrics(metricReports <-chan *ReportMetricsMessage) {
 	for {
-		report, ok := <-reportedMetrics
+		report, ok := <-metricReports
 		if !ok {
 			log.Println("HandleReportedMetrics shutting down")
 			return
@@ -290,12 +296,16 @@ func HandleReportedMetrics(reportedMetrics <-chan *ReportMetricsMessage) {
 	}
 }
 
-func HandleReceivedPackets(rxPackets <-chan *RxPacket, reportedMetrics chan<- *ReportMetricsMessage) {
+func handleMetricReport(report *ReportMetricsMessage) {
+
+}
+
+func HandleReceivedPackets(rxPackets <-chan *RxPacket, metricReports chan<- *ReportMetricsMessage, metricRegistrations chan<- *RegisterMetricsMessage) {
 	for {
 		packet, ok := <-rxPackets
 		if !ok {
 			log.Println("HandleReceivedPackets shutting down")
-			close(reportedMetrics)
+			close(metricReports)
 			return
 		}
 
@@ -353,7 +363,38 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket, reportedMetrics chan<- *R
 				report.metrics[mid] = int64(val)
 				log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
 			}
-			reportedMetrics <- report
+			metricReports <- report
+		} else if method == REGISTER_METRICS_MESSAGE_TYPE {
+			registration := &RegisterMetricsMessage{sender: sender}
+			numMetrics := uint64(0)
+			err, i, numMetrics = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			log.Printf("num metrics: %d\n", numMetrics)
+			registration.metricNames = make([]string, numMetrics)
+			
+			for m := uint64(0); m < numMetrics; m++ {
+				chars := uint64(0)
+				err, i, chars = decodeVarUint(data, i)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+
+				registration.metricNames[m] = ""
+				for c := uint64(0); c < chars; c++ {
+					if i >= uint(len(data)) {
+						fmt.Println("Write a better error message")
+						continue
+					}
+					registration.metricNames[m] += string(data[i])
+					i++
+				}
+			}
+
+			metricRegistrations <- registration
 		} else {
 			fmt.Println(fmt.Errorf("Unknown method %d", method))
 		}
@@ -411,12 +452,13 @@ func main() {
 
 	xbeeFrames := make(chan *XbeeFrame)
 	rxPackets := make(chan *RxPacket)
-	reportedMetrics := make(chan *ReportMetricsMessage)
+	metricReports := make(chan *ReportMetricsMessage)
+	metricRegistrations := make(chan *RegisterMetricsMessage)
 
 	accum := NewAccum(xbeeFrames)
 	go ConsumeXbeeFrames(xbeeFrames, rxPackets)
-	go HandleReceivedPackets(rxPackets, reportedMetrics)
-	go HandleReportedMetrics(reportedMetrics)
+	go HandleReceivedPackets(rxPackets, metricReports, metricRegistrations)
+	go HandleReportedMetrics(metricReports)
 
 	buf := make([]byte, 128)
 

@@ -226,11 +226,28 @@ func ReportsEq(expected, actual *ReportMetricsMessage, t *testing.T) {
 	}
 }
 
+func RegistrationsEq(expected, actual *RegisterMetricsMessage, t *testing.T) {
+	if expected.sender != actual.sender {
+		t.Errorf("RegisterMetricsMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
+	}
+
+	if len(expected.metricNames) != len(actual.metricNames) {
+		t.Errorf("RegisterMetricsMessages don't match in 'len(metricNames)' param.\nExpected: %d.\nActual: %d.", len(expected.metricNames), len(actual.metricNames))
+	}
+
+	for i := 0 ; i < len(expected.metricNames) && i < len(actual.metricNames); i++ {
+		if expected.metricNames[i] != actual.metricNames[i] {
+			t.Errorf("RegisterMetricsMessages don't match at metric[%d].\nExpected: %s.\nActual: %s.", i, expected.metricNames[i], actual.metricNames[i])
+		}
+	}
+}
+
 func TestMetricReport(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)
+	registrations := make(chan *RegisterMetricsMessage, 1)
 
-	go HandleReceivedPackets(packets, reports)
+	go HandleReceivedPackets(packets, reports, registrations)
 
 	packets <- &RxPacket{
 		payload: []byte{0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 0x1, 0x2, 0x1, 0x4},
@@ -251,8 +268,9 @@ func TestMetricReport(t *testing.T) {
 func TestMalformedMetricReport(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)
+	registrations := make(chan *RegisterMetricsMessage, 1)
 
-	go HandleReceivedPackets(packets, reports)
+	go HandleReceivedPackets(packets, reports, registrations)
 
 	packets <- &RxPacket{
 		payload: []byte{0x1},
@@ -273,8 +291,9 @@ func TestMalformedMetricReport(t *testing.T) {
 func TestUnsupportedProtocolVersion(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)
+	registrations := make(chan *RegisterMetricsMessage, 1)
 
-	go HandleReceivedPackets(packets, reports)
+	go HandleReceivedPackets(packets, reports, registrations)
 
 	packets <- &RxPacket{
 		payload: []byte{0x1, 0x2, 0x1, 0x1},
@@ -295,8 +314,9 @@ func TestUnsupportedProtocolVersion(t *testing.T) {
 func TestUnknownMethod(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)
+	registrations := make(chan *RegisterMetricsMessage, 1)
 
-	go HandleReceivedPackets(packets, reports)
+	go HandleReceivedPackets(packets, reports, registrations)
 
 	packets <- &RxPacket{
 		payload: []byte{0x1, 0x1, 0x1, 0xFF},
@@ -317,8 +337,9 @@ func TestUnknownMethod(t *testing.T) {
 func TestReadMessageAfterError(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)
+	registrations := make(chan *RegisterMetricsMessage, 1)
 
-	go HandleReceivedPackets(packets, reports)
+	go HandleReceivedPackets(packets, reports, registrations)
 
 	packets <- &RxPacket{
 		payload: []byte{0x1, 0x1, 0x1, 0xFF},
@@ -340,5 +361,28 @@ func TestReadMessageAfterError(t *testing.T) {
 		&ReportMetricsMessage{
 			sender:  0x2222,
 			metrics: map[uint64]int64{10: 11},
+		}, actual, t)
+}
+
+func TestRegisterMetrics(t *testing.T) {
+	packets := make(chan *RxPacket, 1)
+	reports := make(chan *ReportMetricsMessage, 1)
+	registrations := make(chan *RegisterMetricsMessage, 1)
+
+	go HandleReceivedPackets(packets, reports, registrations)
+
+	packets <- &RxPacket{
+		payload: []byte{0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 'F', 'O', 'O'},
+		sender: 0x2222,
+		rssi: 0x12,
+		options: 0x00,
+	}
+
+	actual := <- registrations
+
+	RegistrationsEq(
+		&RegisterMetricsMessage{
+			sender: 0x2222,
+			metricNames: []string { "FOO" },
 		}, actual, t)
 }
