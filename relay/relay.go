@@ -51,28 +51,6 @@ func arrayAsHexWithLen(a []byte, length int) string {
 	return s
 }
 
-func configureSerial(file *os.File) {
-	fd := file.Fd()
-	t := syscall.Termios{
-		Iflag:  0,
-		Cflag:  syscall.CS8 | syscall.CREAD | syscall.CLOCAL | syscall.B9600,
-		Cc:     [32]uint8{syscall.VMIN: 1},
-		Ispeed: syscall.B9600,
-		Ospeed: syscall.B9600,
-	}
-
-	if _, _, errno := syscall.Syscall6(
-		syscall.SYS_IOCTL,
-		uintptr(fd),
-		uintptr(syscall.TCSETS),
-		uintptr(unsafe.Pointer(&t)),
-		0,
-		0,
-		0,
-	); errno != 0 {
-		log.Fatalf("Errno configuring serial port: %d\n", errno)
-	}
-}
 
 func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	if offset >= uint(len(data)) {
