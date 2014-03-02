@@ -19,7 +19,7 @@ func NewSerialChannel(filename string) (*SerialChannel, error) {
 	}
 
 	configureSerial(file);
-	sc := &SerialChannel{underlyingFile: file}
+	sc := &SerialChannel{underlyingFile: file, channelApi: make(chan []byte)}
 	go sc.readLoop()
 	return sc, nil
 }
