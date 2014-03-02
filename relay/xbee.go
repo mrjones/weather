@@ -25,11 +25,9 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
-
 type XbeeConnection struct {
 	rxData chan *RxPacket
 	accum *Accum
-	serial *SerialConnection
 	xbeeFrames chan *XbeeFrame
 }
 
@@ -37,12 +35,10 @@ func NewXbeeConnection(serial *SerialConnection) *XbeeConnection {
 	frameChan := make(chan *XbeeFrame)
 	connection := &XbeeConnection{
 		rxData: make(chan *RxPacket),
-		accum: NewAccum(frameChan),
-		serial: serial,
+		accum: NewAccum(serial, frameChan),
 		xbeeFrames: frameChan,
 	}
 
-	go connection.readFromSerialLoop()
 	go connection.processIncomingFrames()
 
 	return connection
@@ -80,24 +76,6 @@ func (x *XbeeConnection) processIncomingFrames() {
 			x.rxData <- packet
 		} else {
 			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
-		}
-	}
-
-}
-
-func (x *XbeeConnection) readFromSerialLoop() {
-	buf := make([]byte, 128)
-
-	for {
-		n, err := x.serial.file.Read(buf)
-		log.Printf("Read %d bytes\n", n)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = x.accum.Consume(buf, 0, n)
-		if err != nil {
-			log.Fatal(err)
 		}
 	}
 }
@@ -159,14 +137,34 @@ type Accum struct {
 	state                int
 	bytesConsumedInState uint16
 
+	serial       *SerialConnection
 	currentFrame *XbeeFrame
 	frameSink    chan<- *XbeeFrame
 }
 
-func NewAccum(frameSink chan<- *XbeeFrame) *Accum {
-	a := &Accum{frameSink: frameSink}
+
+func NewAccum(serial *SerialConnection, frameSink chan<- *XbeeFrame) *Accum {
+	a := &Accum{frameSink: frameSink, serial: serial}
 	a.reset()
+	go a.doSerialIo()
 	return a
+}
+
+func (a *Accum) doSerialIo() {
+	buf := make([]byte, 128)
+
+	for {
+		n, err := a.serial.file.Read(buf)
+		log.Printf("Read %d bytes\n", n)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		err = a.Consume(buf, 0, n)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 }
 
 func (a *Accum) Consume(data []byte, offset int, length int) error {
