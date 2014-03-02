@@ -146,11 +146,11 @@ type RawXbeeDevice struct {
 func NewRawXbeeDevice(serial *SerialConnection, frameSink chan<- *XbeeFrame) *RawXbeeDevice {
 	a := &RawXbeeDevice{frameSink: frameSink, serial: serial}
 	a.reset()
-	go a.doSerialIo()
+	go a.serialIoLoop()
 	return a
 }
 
-func (a *RawXbeeDevice) doSerialIo() {
+func (a *RawXbeeDevice) serialIoLoop() {
 	buf := make([]byte, 128)
 
 	for {
