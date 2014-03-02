@@ -27,16 +27,13 @@ const (
 
 type XbeeConnection struct {
 	rxData chan *RxPacket
-	rawXbee *RawXbeeDevice
 	xbeeFrames chan *XbeeFrame
 }
 
-func NewXbeeConnection(serial *SerialConnection) *XbeeConnection {
-	frameChan := make(chan *XbeeFrame)
+func NewXbeeConnection(xbeeFrames chan *XbeeFrame) *XbeeConnection {
 	connection := &XbeeConnection{
 		rxData: make(chan *RxPacket),
-		rawXbee: NewRawXbeeDevice(serial, frameChan),
-		xbeeFrames: frameChan,
+		xbeeFrames: xbeeFrames,
 	}
 
 	go connection.processIncomingFrames()
@@ -137,24 +134,35 @@ type RawXbeeDevice struct {
 	state                int
 	bytesConsumedInState uint16
 
-	serial       *SerialConnection
+	serial       chan []byte
 	currentFrame *XbeeFrame
 	frameSink    chan<- *XbeeFrame
 }
 
-
-func NewRawXbeeDevice(serial *SerialConnection, frameSink chan<- *XbeeFrame) *RawXbeeDevice {
+func NewRawXbeeDevice(serial chan []byte, frameSink chan<- *XbeeFrame) *RawXbeeDevice {
 	a := &RawXbeeDevice{frameSink: frameSink, serial: serial}
 	a.reset()
-	go a.serialIoLoop()
+	go a.readChannelInLoop()
 	return a
 }
 
+func (x *RawXbeeDevice) Shutdown() {
+	// TODO: implement me
+}
+
+func (a *RawXbeeDevice) readChannelInLoop() {
+	for {
+		buf := <- a.serial
+		a.Consume(buf, 0, len(buf))
+	}
+}
+
+/*
 func (a *RawXbeeDevice) serialIoLoop() {
 	buf := make([]byte, 128)
 
 	for {
-		n, err := a.serial.file.Read(buf)
+		n, err := a.serial.Read(buf)
 		log.Printf("Read %d bytes\n", n)
 		if err != nil {
 			log.Fatal(err)
@@ -166,6 +174,7 @@ func (a *RawXbeeDevice) serialIoLoop() {
 		}
 	}
 }
+*/
 
 func (a *RawXbeeDevice) Consume(data []byte, offset int, length int) error {
 	if offset+length > len(data) {

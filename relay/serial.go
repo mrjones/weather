@@ -7,8 +7,57 @@ import (
 	"unsafe"
 )
 
+type SerialChannel struct {
+	underlyingFile *os.File
+	channelApi chan []byte
+}
+
+func NewSerialChannel(filename string) (*SerialChannel, error) {
+	file, err := os.OpenFile(filename, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
+	if err != nil {
+		return nil, err
+	}
+
+	configureSerial(file);
+	sc := &SerialChannel{underlyingFile: file}
+	go sc.readLoop()
+	return sc, nil
+}
+
+func (sc *SerialChannel) Channel() (chan []byte) {
+	return sc.channelApi;
+}
+
+func (sc *SerialChannel) readLoop() {
+	buf := make([]byte, 1024)
+	for {
+		n, err := sc.underlyingFile.Read(buf)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if n > 0 {
+			sc.channelApi <- buf[:n]
+		}
+	}
+}
+
+func (sc *SerialChannel) writeLoop() {
+	// TODO: implement me
+}
+
+// ----
+
 type SerialConnection struct {
 	file *os.File
+}
+
+func (s *SerialConnection) Read(p []byte) (n int, err error) {
+	return s.file.Read(p)
+}
+
+func (s *SerialConnection) Write(p []byte) (n int, err error) {
+	return s.file.Write(p)
 }
 
 func NewSerialConnection(name string) (*SerialConnection, error) {

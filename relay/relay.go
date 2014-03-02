@@ -186,12 +186,15 @@ func HandleReceivedPackets(rxPackets <-chan *RxPacket, metricReports chan<- *Rep
 }
 
 func main() {
-	serialPort, err := NewSerialConnection("/dev/ttyAMA0")
+//	serialPort, err := NewSerialConnection("/dev/ttyAMA0")
+	serial, err := NewSerialChannel("/dev/ttyAMA0")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	xbee := NewXbeeConnection(serialPort);
+	frameChan := make(chan *XbeeFrame)
+	rawDevice := NewRawXbeeDevice(serial.Channel(), frameChan)
+	xbee := NewXbeeConnection(frameChan);
 
 	metricReports := make(chan *ReportMetricsMessage)
 	metricRegistrations := make(chan *RegisterMetricsMessage)
@@ -215,4 +218,6 @@ func main() {
 
 	shutdown := make(chan bool)
 	<-shutdown
+
+	rawDevice.Shutdown()
 }
