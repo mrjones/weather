@@ -188,14 +188,20 @@ type RawXbeeDevice struct {
 	state                int
 	bytesConsumedInState uint16
 
-	serial       <-chan []byte
+	serialFromDevice       <-chan []byte
+	serialToDevice       chan<- []byte
 	currentFrame *XbeeFrame
-	outgoingFrames    chan<- *XbeeFrame
-	incomingFrames    <-chan *XbeeFrame
+	framesFromDevice    chan<- *XbeeFrame
+	framesToDevice    <-chan *XbeeFrame
 }
 
-func NewRawXbeeDevice(serial <-chan []byte, outgoingFrames chan<- *XbeeFrame, incomingFrames <-chan *XbeeFrame) *RawXbeeDevice {
-	a := &RawXbeeDevice{outgoingFrames: outgoingFrames, serial: serial}
+func NewRawXbeeDevice(serialFromDevice <-chan []byte, serialToDevice chan<- []byte, framesFromDevice chan<- *XbeeFrame, framesToDevice <-chan *XbeeFrame) *RawXbeeDevice {
+	a := &RawXbeeDevice{
+		serialFromDevice: serialFromDevice,
+		serialToDevice: serialToDevice,
+		framesFromDevice: framesFromDevice,
+		framesToDevice: framesToDevice,
+	}
 	a.reset()
 	go a.readSerialLoop()
 	return a
@@ -207,7 +213,7 @@ func (x *RawXbeeDevice) Shutdown() {
 
 func (a *RawXbeeDevice) readSerialLoop() {
 	for {
-		buf := <- a.serial
+		buf := <- a.serialFromDevice
 		a.Consume(buf, 0, len(buf))
 	}
 }
@@ -293,7 +299,7 @@ func (a *RawXbeeDevice) verifyChecksum(data []byte, offset int, len int) (int, e
 
 	if v == 0xFF {
 		fmt.Println("Valid checksum! Sending frame")
-		a.outgoingFrames <- a.currentFrame
+		a.framesFromDevice <- a.currentFrame
 		a.reset()
 	} else {
 		fmt.Printf("Invalid checksum! Dropping frame 0x%x\n", v)

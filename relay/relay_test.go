@@ -52,7 +52,7 @@ func AssertNoError(err error, t *testing.T) {
 func TestConsumeMessageAllAtOnce(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial.Read, serial.Write, frames.FromDevice, frames.ToDevice)
 
 	serial.Read <-[]byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 
@@ -70,7 +70,7 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 func TestConsumeMessageByteByByte(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial.Read, serial.Write, frames.FromDevice, frames.ToDevice)
 	serial.Read <- []byte{0x7e}
 	serial.Read <- []byte{0x00}
 	serial.Read <- []byte{0x03}
@@ -93,7 +93,7 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 func TestConsumeTwoMessages(t *testing.T) {
 	serial := NewSerialPair(1)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial.Read, serial.Write, frames.FromDevice, frames.ToDevice)
 
 	serial.Read <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 	serial.Read <- []byte{0x7e, 0x00, 0x04, 0x12, 0x34, 0x56, 0x78, 0xEB}
@@ -121,7 +121,7 @@ func TestConsumeTwoMessages(t *testing.T) {
 func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial.Read, serial.Write, frames.FromDevice, frames.ToDevice)
 
 	serial.Read <- []byte{0x7e, 0x00, 0x01, 0x99, 0x00}
 	serial.Read <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}

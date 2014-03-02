@@ -194,7 +194,7 @@ func main() {
 
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
-	rawDevice := NewRawXbeeDevice(serial.ReadChannel(), framesFromDevice, framesToDevice)
+	rawDevice := NewRawXbeeDevice(serial.ReadChannel(), serial.WriteChannel(), framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
 
 	metricReports := make(chan *ReportMetricsMessage)
