@@ -203,7 +203,7 @@ func NewRawXbeeDevice(serialFromDevice <-chan []byte, serialToDevice chan<- []by
 		framesToDevice: framesToDevice,
 	}
 	a.reset()
-	go a.readSerialLoop()
+	go a.serialIoLoop()
 	return a
 }
 
@@ -211,10 +211,26 @@ func (x *RawXbeeDevice) Shutdown() {
 	// TODO: implement me
 }
 
-func (a *RawXbeeDevice) readSerialLoop() {
+func (a *RawXbeeDevice) serialIoLoop() {
 	for {
-		buf := <- a.serialFromDevice
-		a.Consume(buf, 0, len(buf))
+		select {
+		case buf := <- a.serialFromDevice:
+			a.Consume(buf, 0, len(buf))
+		case frame := <- a.framesToDevice:
+			if len(frame.payload) != int(frame.length) {
+				fmt.Printf("Malformed length field")
+				continue
+			}
+			payload := make([]byte, frame.length + 4)
+			payload[0] = 0x7E
+			payload[1] = byte((frame.length >> 8) & 0xFF)
+			payload[2] = byte(frame.length & 0xFF)
+			for i := uint16(0) ; i < frame.length; i++ {
+				payload[3+i] = frame.payload[i]
+			}
+			payload[len(payload) - 1] = frame.checksum
+			a.serialToDevice <- payload
+		}
 	}
 }
 

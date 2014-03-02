@@ -29,6 +29,13 @@ func NewFramePair(n int) *FramePair {
 	}
 }
 
+func ArraysEq(expected, actual []byte, t *testing.T) {
+	if bytes.Compare(expected, actual) != 0 {
+		t.Errorf("Arrays don't match.\nExpected: '%s'.\nActual: '%s'.", arrayAsHex(expected), arrayAsHex(actual))
+	}
+
+}
+
 func FramesEq(expected, actual *XbeeFrame, t *testing.T) {
 	if expected.length != actual.length {
 		t.Errorf("XbeeFrames don't match in 'length' param.\nExpected: '%d'.\nActual: '%d'.", expected.length, actual.length)
@@ -138,7 +145,20 @@ func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
 }
 
 func TestWritesFrames(t *testing.T) {
-	
+	serial := NewSerialPair(0)
+	frames := NewFramePair(0)
+	device := NewRawXbeeDevice(serial.Read, serial.Write, frames.FromDevice, frames.ToDevice)
+
+	frames.ToDevice <- &XbeeFrame{
+		length: 3,
+		payload: []byte{0x12, 0x34, 0x56},
+		checksum: 0x63,
+	}
+
+	actual := <- serial.Write
+	device.Shutdown()
+
+	ArraysEq([]byte{0x7E, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}, actual, t)
 }
 
 // ===============
