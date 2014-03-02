@@ -27,7 +27,7 @@ const (
 
 type XbeeConnection struct {
 	rxData chan *RxPacket
-	accum *Accum
+	rawXbee *RawXbeeDevice
 	xbeeFrames chan *XbeeFrame
 }
 
@@ -35,7 +35,7 @@ func NewXbeeConnection(serial *SerialConnection) *XbeeConnection {
 	frameChan := make(chan *XbeeFrame)
 	connection := &XbeeConnection{
 		rxData: make(chan *RxPacket),
-		accum: NewAccum(serial, frameChan),
+		rawXbee: NewRawXbeeDevice(serial, frameChan),
 		xbeeFrames: frameChan,
 	}
 
@@ -133,7 +133,7 @@ func (f *XbeeFrame) Serialize() []byte {
 	return data
 }
 
-type Accum struct {
+type RawXbeeDevice struct {
 	state                int
 	bytesConsumedInState uint16
 
@@ -143,14 +143,14 @@ type Accum struct {
 }
 
 
-func NewAccum(serial *SerialConnection, frameSink chan<- *XbeeFrame) *Accum {
-	a := &Accum{frameSink: frameSink, serial: serial}
+func NewRawXbeeDevice(serial *SerialConnection, frameSink chan<- *XbeeFrame) *RawXbeeDevice {
+	a := &RawXbeeDevice{frameSink: frameSink, serial: serial}
 	a.reset()
 	go a.doSerialIo()
 	return a
 }
 
-func (a *Accum) doSerialIo() {
+func (a *RawXbeeDevice) doSerialIo() {
 	buf := make([]byte, 128)
 
 	for {
@@ -167,7 +167,7 @@ func (a *Accum) doSerialIo() {
 	}
 }
 
-func (a *Accum) Consume(data []byte, offset int, length int) error {
+func (a *RawXbeeDevice) Consume(data []byte, offset int, length int) error {
 	if offset+length > len(data) {
 		return fmt.Errorf("Can't consume bytes [%d,%d). Array length is %d.",
 			offset, offset+length, len(data))
@@ -206,18 +206,18 @@ func (a *Accum) Consume(data []byte, offset int, length int) error {
 	}
 }
 
-func (a *Accum) transition(state int) {
+func (a *RawXbeeDevice) transition(state int) {
 	fmt.Printf("Transitioning to %d\n", state)
 	a.state = state
 	a.bytesConsumedInState = 0
 }
 
-func (a *Accum) reset() {
+func (a *RawXbeeDevice) reset() {
 	a.currentFrame = &XbeeFrame{length: 0, checksum: 0}
 	a.transition(STATE_OUT_OF_SYNC)
 }
 
-func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
+func (a *RawXbeeDevice) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	a.currentFrame.checksum = uint8(data[offset])
 
 	v := 0
@@ -238,7 +238,7 @@ func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-func (a *Accum) copyPayload(data []byte, offset int, len int) (int, error) {
+func (a *RawXbeeDevice) copyPayload(data []byte, offset int, len int) (int, error) {
 	if a.bytesConsumedInState == 0 {
 		a.currentFrame.payload = make([]byte, a.currentFrame.length)
 	}
@@ -258,7 +258,7 @@ func (a *Accum) copyPayload(data []byte, offset int, len int) (int, error) {
 	return consumed, nil
 }
 
-func (a *Accum) parseLength(data []byte, offset int, len int) (int, error) {
+func (a *RawXbeeDevice) parseLength(data []byte, offset int, len int) (int, error) {
 	a.currentFrame.length = (a.currentFrame.length << 8) + uint16(data[offset])
 	a.bytesConsumedInState++
 
@@ -269,7 +269,7 @@ func (a *Accum) parseLength(data []byte, offset int, len int) (int, error) {
 	return 1, nil
 }
 
-func (a *Accum) getSync(data []byte, offset int, len int) (int, error) {
+func (a *RawXbeeDevice) getSync(data []byte, offset int, len int) (int, error) {
 	if data[offset] == FRAME_DELIMITER {
 		a.transition(STATE_FOUND_FRAME_DELIMITER)
 	}
