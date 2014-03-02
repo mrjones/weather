@@ -27,13 +27,17 @@ const (
 
 type XbeeConnection struct {
 	rxData chan *RxPacket
-	xbeeFrames chan *XbeeFrame
+	txData chan *TxPacket
+	readFrames <-chan *XbeeFrame
+	writeFrames chan<- *XbeeFrame
 }
 
-func NewXbeeConnection(xbeeFrames chan *XbeeFrame) *XbeeConnection {
+func NewXbeeConnection(readFrames <-chan *XbeeFrame, writeFrames chan<- *XbeeFrame) *XbeeConnection {
 	connection := &XbeeConnection{
 		rxData: make(chan *RxPacket),
-		xbeeFrames: xbeeFrames,
+		txData: make(chan *TxPacket),
+		readFrames: readFrames,
+		writeFrames: writeFrames,
 	}
 
 	go connection.processIncomingFrames()
@@ -41,40 +45,90 @@ func NewXbeeConnection(xbeeFrames chan *XbeeFrame) *XbeeConnection {
 	return connection
 }
 
+
+
 func (x *XbeeConnection) processIncomingFrames() {
 	for {
-		frame, ok := <-x.xbeeFrames
-		if !ok {
-			log.Printf("processIncomingFrames shutting down.")
-			close(x.rxData)
-			return
-		}
-
-		data := frame.payload
-		if data[0] == RX_PACKET_16BIT {
-			if len(data) < 5 {
-				log.Printf("Malformed packet (too short, length = %d).", len(data))
-				continue
+		select {
+		case frame, ok := <- x.readFrames:
+			if !ok {
+				log.Printf("processIncomingFrames shutting down.")
+				close(x.rxData)
+				return
 			}
-			senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
-			payloadLength := len(data) - 5
-			var payload = make([]byte, payloadLength)
-			for i := 0; i < payloadLength; i++ {
-				payload[i] = data[i+5]
+			x.processIncomingFrame(frame)
+		case txPacket, ok := <- x.txData:
+			if !ok {
+				log.Printf("processIncomingFrames shutting down.")
+				close(x.txData)
+				return
 			}
-
-			packet := &RxPacket{
-				payload: payload,
-				sender:  senderAddr,
-				rssi:    uint8(data[3]),
-				options: data[4],
-			}
-			log.Printf("%s", packet.DebugString())
-			x.rxData <- packet
-		} else {
-			fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
+			x.processOutgoingPacket(txPacket)
 		}
 	}
+}
+
+func (x *XbeeConnection) processOutgoingPacket(packet *TxPacket) {
+
+	payload := make([]byte, len(packet.payload) + 5)
+	payload[0] = 0x01
+	payload[1] = 0x00
+	payload[2] = byte((packet.destination >> 8) & 0xFF)
+	payload[3] = byte(packet.destination & 0xFF)
+	payload[4] = packet.options
+	for i := 0 ; i < len(packet.payload); i++ {
+		payload[5 + i] = packet.payload[i]
+	}
+
+	sum := uint8(0)
+	for i := 0 ; i < len(payload); i++ {
+		sum += uint8(payload[0])
+	}
+
+	frame := &XbeeFrame{
+		length: uint16(len(payload)), // TODO: check overflow
+		payload: payload,
+		checksum: 0xFF - sum,
+	}
+
+	x.writeFrames <- frame
+}
+
+func (x *XbeeConnection) processIncomingFrame(frame *XbeeFrame) {
+	data := frame.payload
+	if data[0] == RX_PACKET_16BIT {
+		if len(data) < 5 {
+			log.Printf("Malformed packet (too short, length = %d).", len(data))
+			return
+		}
+		senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
+		payloadLength := len(data) - 5
+		var payload = make([]byte, payloadLength)
+		for i := 0; i < payloadLength; i++ {
+			payload[i] = data[i+5]
+		}
+
+		packet := &RxPacket{
+			payload: payload,
+			sender:  senderAddr,
+			rssi:    uint8(data[3]),
+			options: data[4],
+		}
+		log.Printf("%s", packet.DebugString())
+		x.rxData <- packet
+	} else {
+		fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
+	}
+}
+
+func (x *XbeeConnection) TxData() chan<- *TxPacket {
+	return x.txData
+}
+
+type TxPacket struct {
+	payload []byte
+	destination uint16
+	options uint8
 }
 
 func (x *XbeeConnection) RxData() <-chan *RxPacket {
@@ -134,15 +188,16 @@ type RawXbeeDevice struct {
 	state                int
 	bytesConsumedInState uint16
 
-	serial       chan []byte
+	serial       <-chan []byte
 	currentFrame *XbeeFrame
-	frameSink    chan<- *XbeeFrame
+	outgoingFrames    chan<- *XbeeFrame
+	incomingFrames    <-chan *XbeeFrame
 }
 
-func NewRawXbeeDevice(serial chan []byte, frameSink chan<- *XbeeFrame) *RawXbeeDevice {
-	a := &RawXbeeDevice{frameSink: frameSink, serial: serial}
+func NewRawXbeeDevice(serial <-chan []byte, outgoingFrames chan<- *XbeeFrame, incomingFrames <-chan *XbeeFrame) *RawXbeeDevice {
+	a := &RawXbeeDevice{outgoingFrames: outgoingFrames, serial: serial}
 	a.reset()
-	go a.readChannelInLoop()
+	go a.readSerialLoop()
 	return a
 }
 
@@ -150,7 +205,7 @@ func (x *RawXbeeDevice) Shutdown() {
 	// TODO: implement me
 }
 
-func (a *RawXbeeDevice) readChannelInLoop() {
+func (a *RawXbeeDevice) readSerialLoop() {
 	for {
 		buf := <- a.serial
 		a.Consume(buf, 0, len(buf))
@@ -238,7 +293,7 @@ func (a *RawXbeeDevice) verifyChecksum(data []byte, offset int, len int) (int, e
 
 	if v == 0xFF {
 		fmt.Println("Valid checksum! Sending frame")
-		a.frameSink <- a.currentFrame
+		a.outgoingFrames <- a.currentFrame
 		a.reset()
 	} else {
 		fmt.Printf("Invalid checksum! Dropping frame 0x%x\n", v)

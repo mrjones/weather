@@ -5,6 +5,30 @@ import (
 	"testing"
 )
 
+type SerialPair struct {
+	Read chan []byte
+	Write chan []byte
+}
+
+func NewSerialPair(n int) *SerialPair {
+	return &SerialPair{
+		Read: make(chan []byte, n),
+		Write: make(chan []byte, n),
+	}
+}
+
+type FramePair struct {
+	FromDevice chan *XbeeFrame
+	ToDevice chan *XbeeFrame
+}
+
+func NewFramePair(n int) *FramePair {
+	return &FramePair{
+		FromDevice: make(chan *XbeeFrame, n),
+		ToDevice: make(chan *XbeeFrame, n),
+	}
+}
+
 func FramesEq(expected, actual *XbeeFrame, t *testing.T) {
 	if expected.length != actual.length {
 		t.Errorf("XbeeFrames don't match in 'length' param.\nExpected: '%d'.\nActual: '%d'.", expected.length, actual.length)
@@ -26,13 +50,13 @@ func AssertNoError(err error, t *testing.T) {
 }
 
 func TestConsumeMessageAllAtOnce(t *testing.T) {
-	input := make(chan []byte, 1)
-	output := make(chan *XbeeFrame, 1)
-	device := NewRawXbeeDevice(input, output)
+	serial := NewSerialPair(0)
+	frames := NewFramePair(0)
+	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
 
-	input <-[]byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
+	serial.Read <-[]byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 
-	actual := <-output
+	actual := <-frames.FromDevice
 	device.Shutdown()
 
 	FramesEq(
@@ -44,19 +68,18 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 }
 
 func TestConsumeMessageByteByByte(t *testing.T) {
-	input := make(chan []byte, 1)
-	output := make(chan *XbeeFrame, 1)
-	device := NewRawXbeeDevice(input, output)
+	serial := NewSerialPair(0)
+	frames := NewFramePair(0)
+	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
+	serial.Read <- []byte{0x7e}
+	serial.Read <- []byte{0x00}
+	serial.Read <- []byte{0x03}
+	serial.Read <- []byte{0x12}
+	serial.Read <- []byte{0x34}
+	serial.Read <- []byte{0x56}
+	serial.Read <- []byte{0x63}
 
-	input <- []byte{0x7e}
-	input <- []byte{0x00}
-	input <- []byte{0x03}
-	input <- []byte{0x12}
-	input <- []byte{0x34}
-	input <- []byte{0x56}
-	input <- []byte{0x63}
-
-	actual := <-output
+	actual := <-frames.FromDevice
 	device.Shutdown()
 
 	FramesEq(
@@ -68,14 +91,14 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 }
 
 func TestConsumeTwoMessages(t *testing.T) {
-	input := make(chan []byte, 1)
-	output := make(chan *XbeeFrame, 2)
-	device := NewRawXbeeDevice(input, output)
+	serial := NewSerialPair(1)
+	frames := NewFramePair(0)
+	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
 
-	input <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
-	input <- []byte{0x7e, 0x00, 0x04, 0x12, 0x34, 0x56, 0x78, 0xEB}
+	serial.Read <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
+	serial.Read <- []byte{0x7e, 0x00, 0x04, 0x12, 0x34, 0x56, 0x78, 0xEB}
 
-	actual1 := <-output
+	actual1 := <-frames.FromDevice
 
 	FramesEq(
 		&XbeeFrame{
@@ -84,7 +107,7 @@ func TestConsumeTwoMessages(t *testing.T) {
 			checksum: 0x63,
 		}, actual1, t)
 
-	actual2 := <-output
+	actual2 := <-frames.FromDevice
 	device.Shutdown()
 
 	FramesEq(
@@ -96,14 +119,14 @@ func TestConsumeTwoMessages(t *testing.T) {
 }
 
 func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
-	input := make(chan []byte, 1)
-	output := make(chan *XbeeFrame, 0)
-	device := NewRawXbeeDevice(input, output)
+	serial := NewSerialPair(0)
+	frames := NewFramePair(0)
+	device := NewRawXbeeDevice(serial.Read, frames.FromDevice, frames.ToDevice)
 
-	input <- []byte{0x7e, 0x00, 0x01, 0x99, 0x00}
-	input <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
+	serial.Read <- []byte{0x7e, 0x00, 0x01, 0x99, 0x00}
+	serial.Read <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 
-	actual := <-output
+	actual := <-frames.FromDevice
 	device.Shutdown()
 
 	FramesEq(
@@ -114,6 +137,9 @@ func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
 		}, actual, t)
 }
 
+func TestWritesFrames(t *testing.T) {
+	
+}
 
 // ===============
 
@@ -136,10 +162,10 @@ func PacketsEq(expected, actual *RxPacket, t *testing.T) {
 }
 
 func TestConsumeRxFrame(t *testing.T) {
-	frames := make(chan *XbeeFrame, 1)
-	conn := NewXbeeConnection(frames)
+	frames := NewFramePair(0)
+	conn := NewXbeeConnection(frames.FromDevice, frames.ToDevice)
 
-	frames <- &XbeeFrame{
+	frames.FromDevice <- &XbeeFrame{
 		length:   8,
 		payload:  []byte{0x81, 0x22, 0x22, 0x28, 0x01, 0x12, 0x34, 0x56},
 		checksum: 0x00}
@@ -156,15 +182,15 @@ func TestConsumeRxFrame(t *testing.T) {
 }
 
 func TestMalformedRxFrame_TooShort(t *testing.T) {
-	frames := make(chan *XbeeFrame, 1)
-	conn := NewXbeeConnection(frames)
+	frames := NewFramePair(0)
+	conn := NewXbeeConnection(frames.FromDevice, frames.ToDevice)
 
-	frames <- &XbeeFrame{
+	frames.FromDevice <- &XbeeFrame{
 		length:   4,
 		payload:  []byte{0x81, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
-	close(frames)
+	close(frames.FromDevice)
 
 	packet, ok := <-conn.RxData()
 
@@ -178,15 +204,15 @@ func TestMalformedRxFrame_TooShort(t *testing.T) {
 }
 
 func TestIgnoresUnknownFrames(t *testing.T) {
-	frames := make(chan *XbeeFrame, 1)
-	conn := NewXbeeConnection(frames)
+	frames := NewFramePair(0)
+	conn := NewXbeeConnection(frames.FromDevice, frames.ToDevice)
 
-	frames <- &XbeeFrame{
+	frames.FromDevice <- &XbeeFrame{
 		length:   4,
 		payload:  []byte{0xEE, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
-	close(frames)
+	close(frames.FromDevice)
 
 	packet, ok := <-conn.RxData()
 
@@ -198,6 +224,29 @@ func TestIgnoresUnknownFrames(t *testing.T) {
 		t.Errorf("Got an unexpected packet after reading a garbage frame")
 	}
 }
+
+func TestTransmitPacket(t *testing.T) {
+	frames := NewFramePair(0)
+	conn := NewXbeeConnection(frames.FromDevice, frames.ToDevice)
+
+	packet := &TxPacket {
+		payload: []byte{0x12, 0x34, 0x56},
+		destination: 0x2222,
+		options: 0x01,  // Disable ACK
+	}
+
+	conn.TxData() <- packet
+
+	actual := <- frames.ToDevice
+
+	FramesEq(
+		&XbeeFrame{
+			length: 8,
+			payload: []byte{0x01, 0x00, 0x22, 0x22, 0x01, 0x12, 0x34, 0x56},
+			checksum: 0xF7,
+		}, actual, t)
+}
+
 
 // ===============
 

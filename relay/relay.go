@@ -192,9 +192,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	frameChan := make(chan *XbeeFrame)
-	rawDevice := NewRawXbeeDevice(serial.Channel(), frameChan)
-	xbee := NewXbeeConnection(frameChan);
+	framesFromDevice := make(chan *XbeeFrame)
+	framesToDevice := make(chan *XbeeFrame)
+	rawDevice := NewRawXbeeDevice(serial.ReadChannel(), framesFromDevice, framesToDevice)
+	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
 
 	metricReports := make(chan *ReportMetricsMessage)
 	metricRegistrations := make(chan *RegisterMetricsMessage)

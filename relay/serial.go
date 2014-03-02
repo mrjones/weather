@@ -9,7 +9,8 @@ import (
 
 type SerialChannel struct {
 	underlyingFile *os.File
-	channelApi chan []byte
+	readChannel chan []byte
+	writeChannel chan []byte
 }
 
 func NewSerialChannel(filename string) (*SerialChannel, error) {
@@ -19,13 +20,21 @@ func NewSerialChannel(filename string) (*SerialChannel, error) {
 	}
 
 	configureSerial(file);
-	sc := &SerialChannel{underlyingFile: file, channelApi: make(chan []byte)}
+	sc := &SerialChannel{
+		underlyingFile: file,
+		readChannel: make(chan []byte),
+		writeChannel: make(chan []byte),
+	}
 	go sc.readLoop()
 	return sc, nil
 }
 
-func (sc *SerialChannel) Channel() (chan []byte) {
-	return sc.channelApi;
+func (sc *SerialChannel) ReadChannel() (<-chan []byte) {
+	return sc.readChannel
+}
+
+func (sc *SerialChannel) WriteChannel() (chan<- []byte) {
+	return sc.writeChannel
 }
 
 func (sc *SerialChannel) readLoop() {
@@ -37,7 +46,7 @@ func (sc *SerialChannel) readLoop() {
 			continue
 		}
 		if n > 0 {
-			sc.channelApi <- buf[:n]
+			sc.readChannel <- buf[:n]
 		}
 	}
 }
