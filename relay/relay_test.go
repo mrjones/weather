@@ -95,34 +95,25 @@ func TestConsumeTwoMessages(t *testing.T) {
 		}, actual2, t)
 }
 
-/*
-func TestBoundsChecking(t *testing.T) {
+func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
 	input := make(chan []byte, 1)
 	output := make(chan *XbeeFrame, 0)
-	accum := NewRawXbeeDevice(input, output)
+	device := NewRawXbeeDevice(input, output)
 
-	err := accum.Consume([]byte{0x7e}, 1, 1)
-	if err == nil {
-		t.Errorf("Didn't detect starting past end of array")
-	}
+	input <- []byte{0x7e, 0x00, 0x01, 0x99, 0x00}
+	input <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 
-	err = accum.Consume([]byte{0x7e}, 0, 2)
-	if err == nil {
-		t.Errorf("Didn't detect going past end of array")
-	}
+	actual := <-output
+	device.Shutdown()
+
+	FramesEq(
+		&XbeeFrame{
+			length:   3,
+			payload:  []byte{0x12, 0x34, 0x56},
+			checksum: 0x63,
+		}, actual, t)
 }
 
-func TestVerifiesChecksum(t *testing.T) {
-	input := make(chan []byte, 1)
-	output := make(chan *XbeeFrame, 0)
-	accum := NewRawXbeeDevice(input, output)
-
-	err := accum.Consume([]byte{0x7e, 0x00, 0x01, 0x12, 0x00}, 0, 5)
-	if err == nil {
-		t.Errorf("Didn't detect invalid checksum.")
-	}
-}
-*/
 
 // ===============
 
