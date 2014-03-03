@@ -12,11 +12,13 @@ const (
 	REGISTER_METRICS_MESSAGE_TYPE = 2
 )
 
-type RegisterMetricsMessage struct {
+
+
+type RegisterMetricsRequest struct {
 	metricNames []string
 }
 
-func (m *RegisterMetricsMessage) DebugString() string {
+func (m *RegisterMetricsRequest) DebugString() string {
 	s := "["
 	sep := ""
 
@@ -58,6 +60,37 @@ func arrayAsHexWithLen(a []byte, length int) string {
 	return s
 }
 
+func encodeString(data *[]byte, offset uint, s string) (e error, pos uint) {
+	length := uint(len(s))
+	err, offset := encodeVarUint(data, offset, length)
+	if err != nil {
+		return err, offset
+	}
+
+	if offset + length > uint(len(*data)) {
+		return fmt.Errorf("Buffer overrun (encoding string %s) %d vs. %d.", s, offset, len(*data)), offset
+		
+	}
+
+	for i := uint(0); i < length; i++ {
+		(*data)[offset] = s[i]
+		offset++
+	}
+
+	return nil, offset
+}
+
+func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
+	for n > 0 {
+		if offset >= uint(len(*data)) {
+			return fmt.Errorf("Buffer overrun (encoding varint %d) %d vs. %d.", n, offset, len(*data)), offset
+		}
+		(*data)[offset] = byte(n & 0xFF)
+		n = n >> 8
+		offset++
+	}
+	return nil, offset
+}
 
 func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	if offset >= uint(len(data)) {
@@ -82,8 +115,33 @@ func (r *Relay) reportMetrics(report *ReportMetricsMessage) {
 	log.Printf("Reported metrics: %s", report.DebugString())
 }
 
-func (r *Relay) registerMetrics(registration *RegisterMetricsMessage) {
+func (r *Relay) registerMetrics(registration *RegisterMetricsRequest) {
+	data := make([]byte, 1024)
+	offset := uint(0)
+	var err error
 	log.Printf("Registered metrics: %s", registration.DebugString())
+	for _, name := range registration.metricNames {
+		id, ok := r.metricIds[name]
+		if !ok {
+			id = r.nextId
+			r.nextId++
+			r.metricIds[name] = id
+		}
+
+		err, offset = encodeVarUint(&data, offset, id)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+
+		err, offset = encodeString(&data, offset, name)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+	}
+
+	log.Printf("Response: %s\n", arrayAsHex(data[0:offset]))
 }
 
 func (r *Relay) processPacket(packet *RxPacket) {
@@ -143,7 +201,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 		}
 		r.reportMetrics(report)
 	} else if method == REGISTER_METRICS_MESSAGE_TYPE {
-		registration := &RegisterMetricsMessage{}
+		registration := &RegisterMetricsRequest{}
 		numMetrics := uint64(0)
 		err, i, numMetrics = decodeVarUint(data, i)
 		if err != nil {
@@ -180,10 +238,16 @@ func (r *Relay) processPacket(packet *RxPacket) {
 
 type Relay struct {
 	xbee *XbeeConnection
+	metricIds map[string]uint
+	nextId uint
 }
 
 func NewRelay(xbee *XbeeConnection) (*Relay, error) {
-	r := &Relay{xbee: xbee}
+	r := &Relay{
+		xbee: xbee,
+		metricIds: make(map[string]uint),
+		nextId: 0,
+	}
 	go r.loop()
 	return r, nil
 }
