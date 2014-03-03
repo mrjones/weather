@@ -13,8 +13,18 @@ const (
 )
 
 type RegisterMetricsMessage struct {
-	sender uint16
 	metricNames []string
+}
+
+func (m *RegisterMetricsMessage) DebugString() string {
+	s := "["
+	sep := ""
+
+	for _, r := range m.metricNames {
+		s += r + sep
+		sep = ","
+	}
+	return s + "]"
 }
 
 type ReportMetricsMessage struct {
@@ -68,121 +78,129 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func HandleReportedMetrics(metricReports <-chan *ReportMetricsMessage) {
-	for {
-		report, ok := <-metricReports
-		if !ok {
-			log.Println("HandleReportedMetrics shutting down")
-			return
-		}
+func (r *Relay) reportMetrics(report *ReportMetricsMessage) {
+	log.Printf("Reported metrics: %s", report.DebugString())
+}
 
-		log.Printf("Reported metrics: %s", report.DebugString())
+func (r *Relay) registerMetrics(registration *RegisterMetricsMessage) {
+	log.Printf("Registered metrics: %s", registration.DebugString())
+}
+
+func (r *Relay) processPacket(packet *RxPacket) {
+	data := packet.payload
+	sender := packet.sender
+
+	log.Printf("Payload: %s\n", arrayAsHex(data))
+	log.Printf("Sender:  0x%x\n", sender)
+	i := uint(0)
+
+	err, i, protocolVersion := decodeVarUint(data, i)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
-}
+	if protocolVersion != 1 {
+		fmt.Println(fmt.Errorf("Unsupported protocol version %d.", protocolVersion))
+		return
+	}
 
-func handleMetricReport(report *ReportMetricsMessage) {
+	log.Printf("protocol version: %d\n", protocolVersion)
 
-}
+	err, i, method := decodeVarUint(data, i)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	log.Printf("method: %d\n", method)
 
-func HandleReceivedPackets(rxPackets <-chan *RxPacket, metricReports chan<- *ReportMetricsMessage, metricRegistrations chan<- *RegisterMetricsMessage) {
-	for {
-		packet, ok := <-rxPackets
-		if !ok {
-			log.Println("HandleReceivedPackets shutting down")
-			close(metricReports)
+	if method == REPORT_METRICS_MESSAGE_TYPE {
+		report := &ReportMetricsMessage{sender: sender}
+		err, i, numMetrics := decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
 			return
 		}
+		log.Printf("num metrics: %d\n", numMetrics)
+		report.metrics = make(map[uint64]int64)
 
-		data := packet.payload
-		sender := packet.sender
+		for m := uint64(0); m < numMetrics; m++ {
+			mid := uint64(0)
+			val := uint64(0)
+			err, i, mid = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
 
-		log.Printf("Payload: %s\n", arrayAsHex(data))
-		log.Printf("Sender:  0x%x\n", sender)
-		i := uint(0)
-
-		err, i, protocolVersion := decodeVarUint(data, i)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		if protocolVersion != 1 {
-			fmt.Println(fmt.Errorf("Unsupported protocol version %d.", protocolVersion))
-			continue
-		}
-
-		log.Printf("protocol version: %d\n", protocolVersion)
-
-		err, i, method := decodeVarUint(data, i)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		}
-		log.Printf("method: %d\n", method)
-
-		if method == REPORT_METRICS_MESSAGE_TYPE {
-			report := &ReportMetricsMessage{sender: sender}
-			err, i, numMetrics := decodeVarUint(data, i)
+			err, i, val = decodeVarUint(data, i)
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
-			log.Printf("num metrics: %d\n", numMetrics)
-			report.metrics = make(map[uint64]int64)
 
-			for m := uint64(0); m < numMetrics; m++ {
-				mid := uint64(0)
-				val := uint64(0)
-				err, i, mid = decodeVarUint(data, i)
-				if err != nil {
-					fmt.Println(err)
-					continue
-				}
-
-				err, i, val = decodeVarUint(data, i)
-				if err != nil {
-					fmt.Println(err)
-					continue
-				}
-
-				report.metrics[mid] = int64(val)
-				log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
-			}
-			metricReports <- report
-		} else if method == REGISTER_METRICS_MESSAGE_TYPE {
-			registration := &RegisterMetricsMessage{sender: sender}
-			numMetrics := uint64(0)
-			err, i, numMetrics = decodeVarUint(data, i)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			log.Printf("num metrics: %d\n", numMetrics)
-			registration.metricNames = make([]string, numMetrics)
+			report.metrics[mid] = int64(val)
+			log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
+		}
+		r.reportMetrics(report)
+	} else if method == REGISTER_METRICS_MESSAGE_TYPE {
+		registration := &RegisterMetricsMessage{}
+		numMetrics := uint64(0)
+		err, i, numMetrics = decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Printf("num metrics: %d\n", numMetrics)
+		registration.metricNames = make([]string, numMetrics)
 			
-			for m := uint64(0); m < numMetrics; m++ {
-				chars := uint64(0)
-				err, i, chars = decodeVarUint(data, i)
-				if err != nil {
-					fmt.Println(err)
-					continue
-				}
-
-				registration.metricNames[m] = ""
-				for c := uint64(0); c < chars; c++ {
-					if i >= uint(len(data)) {
-						fmt.Println("Write a better error message")
-						continue
-					}
-					registration.metricNames[m] += string(data[i])
-					i++
-				}
+		for m := uint64(0); m < numMetrics; m++ {
+			chars := uint64(0)
+			err, i, chars = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
 			}
 
-			metricRegistrations <- registration
-		} else {
-			fmt.Println(fmt.Errorf("Unknown method %d", method))
+			registration.metricNames[m] = ""
+			for c := uint64(0); c < chars; c++ {
+				if i >= uint(len(data)) {
+					fmt.Println("Write a better error message")
+					continue
+				}
+				registration.metricNames[m] += string(data[i])
+				i++
+			}
 		}
+
+		r.registerMetrics(registration)
+	} else {
+		fmt.Println(fmt.Errorf("Unknown method %d", method))
 	}
+}
+
+type Relay struct {
+	xbee *XbeeConnection
+}
+
+func NewRelay(xbee *XbeeConnection) (*Relay, error) {
+	r := &Relay{xbee: xbee}
+	go r.loop()
+	return r, nil
+}
+
+func (r *Relay) loop() {
+	for {
+		packet, ok := <-r.xbee.RxData()
+		if !ok {
+			log.Println("Relay shutting down")
+			return
+		}
+		r.processPacket(packet)
+	}
+}
+
+func (r *Relay) Shutdown() {
+	
 }
 
 func main() {
@@ -197,12 +215,10 @@ func main() {
 	rawDevice := NewRawXbeeDevice(serial.ReadChannel(), serial.WriteChannel(), framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
 
-	metricReports := make(chan *ReportMetricsMessage)
-	metricRegistrations := make(chan *RegisterMetricsMessage)
-
-	go HandleReceivedPackets(
-		xbee.RxData(), metricReports, metricRegistrations)
-	go HandleReportedMetrics(metricReports)
+	relay, err := NewRelay(xbee)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	/*
 
@@ -220,5 +236,6 @@ func main() {
 	shutdown := make(chan bool)
 	<-shutdown
 
+	relay.Shutdown()
 	rawDevice.Shutdown()
 }
