@@ -363,7 +363,7 @@ func (r *Relay) Start() {
 
 func (r *Relay) Shutdown() {
 	if !r.shutdown {
-		close(r.reports)
+		close(r.reports) // need a mutex here?
 		r.shutdown = true
 	}
 }

@@ -350,69 +350,76 @@ func TestMalformedMetricReport(t *testing.T) {
 	relay.Shutdown()
 }
 
-/*
 func TestUnsupportedProtocolVersion(t *testing.T) {
-	packets := make(chan *RxPacket, 1)
-	reports := make(chan *ReportMetricsMessage, 1)
-	registrations := make(chan *RegisterMetricsRequest, 1)
+	packets := NewPacketPair(0)
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := NewRelay(packets, reports)
+	AssertNoError(err, t)
 
-	go HandleReceivedPackets(packets, reports, registrations)
-
-	packets <- &RxPacket{
+	packets.FromDevice <- &RxPacket{
 		payload: []byte{0x1, 0x2, 0x1, 0x1},
 		sender:  0x2222,
 		rssi:    0x12,
 		options: 0x00,
 	}
 
-	close(packets)
+	close(packets.FromDevice)
 
 	report, ok := <-reports
 
 	if report != nil || ok {
 		t.Errorf("Got an unexpected report when protocol version was too new.")
 	}
+
+	relay.Shutdown()
 }
 
 func TestUnknownMethod(t *testing.T) {
-	packets := make(chan *RxPacket, 1)
-	reports := make(chan *ReportMetricsMessage, 1)
-	registrations := make(chan *RegisterMetricsRequest, 1)
+	packets := NewPacketPair(0)
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := NewRelay(packets, reports)
+	AssertNoError(err, t)
 
-	go HandleReceivedPackets(packets, reports, registrations)
-
-	packets <- &RxPacket{
+	packets.FromDevice <- &RxPacket{
 		payload: []byte{0x1, 0x1, 0x1, 0xFF},
 		sender:  0x2222,
 		rssi:    0x12,
 		options: 0x00,
 	}
 
-	close(packets)
+	close(packets.FromDevice)
 
 	report, ok := <-reports
 
 	if report != nil || ok {
 		t.Errorf("Got an unexpected report when the method id was bogus.")
 	}
+
+	relay.Shutdown()
 }
 
 func TestReadMessageAfterError(t *testing.T) {
-	packets := make(chan *RxPacket, 1)
-	reports := make(chan *ReportMetricsMessage, 1)
-	registrations := make(chan *RegisterMetricsRequest, 1)
+	packets := NewPacketPair(0)
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := NewRelay(packets, reports)
+	AssertNoError(err, t)
 
-	go HandleReceivedPackets(packets, reports, registrations)
-
-	packets <- &RxPacket{
+	packets.FromDevice <- &RxPacket{
 		payload: []byte{0x1, 0x1, 0x1, 0xFF},
 		sender:  0x2222,
 		rssi:    0x12,
 		options: 0x00,
 	}
 
-	packets <- &RxPacket{
-		payload: []byte{0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0x1, 0xA, 0x1, 0xB},
+	packets.FromDevice <- &RxPacket{
+		payload: []byte{
+			0x1, 0x1, // Protocol Version
+			0x1, 0x3, // Method ID
+			0x1, 0x1, // Num metrics
+			0x1, 0x3, // metric[0] name length
+			'F', 'O', 'O', // metric[0] name
+			0x1, 0xB, // metric[0] value
+		},
 		sender:  0x2222,
 		rssi:    0x12,
 		options: 0x00,
@@ -421,32 +428,10 @@ func TestReadMessageAfterError(t *testing.T) {
 	actual := <-reports
 
 	ReportsEq(
-		&ReportMetricsMessage{
+		&ReportMetricsByNameRequest{
 			sender:  0x2222,
-			metrics: map[uint64]int64{10: 11},
+			metrics: map[string]int64{"FOO": 11},
 		}, actual, t)
+
+	relay.Shutdown()
 }
-
-func TestRegisterMetrics(t *testing.T) {
-	packets := make(chan *RxPacket, 1)
-	reports := make(chan *ReportMetricsMessage, 1)
-	registrations := make(chan *RegisterMetricsRequest, 1)
-
-	go HandleReceivedPackets(packets, reports, registrations)
-
-	packets <- &RxPacket{
-		payload: []byte{0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 'F', 'O', 'O'},
-		sender: 0x2222,
-		rssi: 0x12,
-		options: 0x00,
-	}
-
-	actual := <- registrations
-
-	RegistrationsEq(
-		&RegisterMetricsRequest{
-			sender: 0x2222,
-			metricNames: []string { "FOO" },
-		}, actual, t)
-}
-*/
