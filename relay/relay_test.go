@@ -326,30 +326,31 @@ func TestMetricReport(t *testing.T) {
 	relay.Shutdown()
 }
 
-/*
 func TestMalformedMetricReport(t *testing.T) {
-	packets := make(chan *RxPacket, 1)
-	reports := make(chan *ReportMetricsMessage, 1)
-	registrations := make(chan *RegisterMetricsRequest, 1)
+	packets := NewPacketPair(0)
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := NewRelay(packets, reports)
+	AssertNoError(err, t)
 
-	go HandleReceivedPackets(packets, reports, registrations)
-
-	packets <- &RxPacket{
+	packets.FromDevice <- &RxPacket{
 		payload: []byte{0x1},
 		sender:  0x2222,
 		rssi:    0x12,
 		options: 0x00,
 	}
 
-	close(packets)
+	close(packets.FromDevice)
 
 	report, ok := <-reports
 
 	if report != nil || ok {
 		t.Errorf("Got an unexpected report after processing garbage.")
 	}
+
+	relay.Shutdown()
 }
 
+/*
 func TestUnsupportedProtocolVersion(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)

@@ -331,6 +331,7 @@ type Relay struct {
 	metricIds map[string]uint
 	nextId uint
 	reports chan<- *ReportMetricsByNameRequest
+	shutdown bool
 }
 
 func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsByNameRequest) (*Relay, error) {
@@ -349,6 +350,7 @@ func (r *Relay) loop() {
 		packet, ok := <-r.packets.FromDevice
 		if !ok {
 			log.Println("Relay shutting down")
+			r.Shutdown()
 			return
 		}
 		r.processPacket(packet)
@@ -360,7 +362,10 @@ func (r *Relay) Start() {
 }
 
 func (r *Relay) Shutdown() {
-	
+	if !r.shutdown {
+		close(r.reports)
+		r.shutdown = true
+	}
 }
 
 type SerialPair struct {
