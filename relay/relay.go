@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	REPORT_METRICS_MESSAGE_TYPE = 1
+	REPORT_METRICS_WITH_IDS_MESSAGE_TYPE = 1
 	REGISTER_METRICS_MESSAGE_TYPE = 2
+	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 1
 )
 
 type RegisterMetricsReply struct {
@@ -173,7 +174,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	}
 	log.Printf("method: %d\n", method)
 
-	if method == REPORT_METRICS_MESSAGE_TYPE {
+	if method == REPORT_METRICS_WITH_IDS_MESSAGE_TYPE {
 		report := &ReportMetricsMessage{sender: sender}
 		err, i, numMetrics := decodeVarUint(data, i)
 		if err != nil {
@@ -202,6 +203,8 @@ func (r *Relay) processPacket(packet *RxPacket) {
 			log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
 		}
 		r.reportMetrics(report)
+	} else if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
+		// IMPLEMENT THIS INSTEAD
 	} else if method == REGISTER_METRICS_MESSAGE_TYPE {
 		registration := &RegisterMetricsRequest{}
 		numMetrics := uint64(0)
@@ -303,13 +306,13 @@ func NewSerialPair(n int) *SerialPair {
 	}
 }
 
-func MakeRelay(serial *SerialPair) (*Relay, error) {
+func MakeRelay(serial *SerialPair, hub HubInterface) (*Relay, error) {
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
 	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
 
-	return NewRelay(xbee)
+	return NewRelay(xbee, hub)
 }
 
 func main() {
@@ -318,7 +321,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	relay, err := MakeRelay(serial.Pair())
+	relay, err := MakeRelay(serial.Pair(), &NoOpHub{})
 	if err != nil {
 		log.Fatal(err)
 	}

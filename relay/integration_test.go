@@ -4,10 +4,21 @@ import (
 	"testing"
 )
 
+type FakeHub struct { 
+}
+
+func (h *FakeHub) RegisterMetrics(req *RegisterMetricsRequest) (*RegisterMetricsReply) {
+	return nil
+}
+
+func (h *FakeHub) ReportMetrics(req *ReportMetricsMessage) {
+}
+
 func TestSimple(t *testing.T) {
 	fakeSerial := NewSerialPair(0)
+	fakeHub := &FakeHub{}
 	
-	relay, err := MakeRelay(fakeSerial)
+	relay, err := MakeRelay(fakeSerial, fakeHub)
 	AssertNoError(err, t)
 	relay.Start() // Necessary?
 
