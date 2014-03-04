@@ -12,7 +12,9 @@ const (
 	REGISTER_METRICS_MESSAGE_TYPE = 2
 )
 
+type RegisterMetricsReply struct {
 
+}
 
 type RegisterMetricsRequest struct {
 	metricNames []string
@@ -236,17 +238,35 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	}
 }
 
+type HubInterface interface {
+	RegisterMetrics(request *RegisterMetricsRequest) (*RegisterMetricsReply)
+	ReportMetrics(request *ReportMetricsMessage)
+}
+
+type NoOpHub struct { 
+}
+
+func (h *NoOpHub) RegisterMetrics(req *RegisterMetricsRequest) (*RegisterMetricsReply) {
+	return nil
+}
+
+func (h *NoOpHub) ReportMetrics(req *ReportMetricsMessage) {
+
+}
+
 type Relay struct {
 	xbee *XbeeConnection
 	metricIds map[string]uint
 	nextId uint
+	hub HubInterface
 }
 
-func NewRelay(xbee *XbeeConnection) (*Relay, error) {
+func NewRelay(xbee *XbeeConnection, hub HubInterface) (*Relay, error) {
 	r := &Relay{
 		xbee: xbee,
 		metricIds: make(map[string]uint),
 		nextId: 0,
+		hub: hub,
 	}
 	go r.loop()
 	return r, nil
@@ -282,6 +302,7 @@ func NewSerialPair(n int) *SerialPair {
 		ToDevice: make(chan []byte, n),
 	}
 }
+
 func MakeRelay(serial *SerialPair) (*Relay, error) {
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
