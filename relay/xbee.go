@@ -131,6 +131,13 @@ type TxPacket struct {
 	options uint8
 }
 
+func (x *XbeeConnection) IO() *PacketPair {
+	return &PacketPair{
+		FromDevice: x.rxData,
+		ToDevice: x.txData,
+	}
+}
+
 func (x *XbeeConnection) RxData() <-chan *RxPacket {
 	return x.rxData
 }

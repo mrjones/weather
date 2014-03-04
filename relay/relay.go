@@ -278,16 +278,28 @@ func (h *NoOpHub) ReportMetricsById(req *ReportMetricsRequest) {
 func (h *NoOpHub) ReportMetricsByName(req *ReportMetricsByNameRequest) {
 }
 
+type PacketPair struct {
+	ToDevice chan *TxPacket
+	FromDevice chan *RxPacket
+}
+
+func NewPacketPair(capacity int) *PacketPair {
+	return &PacketPair{
+		ToDevice: make(chan *TxPacket, capacity),
+		FromDevice: make(chan *RxPacket, capacity),
+	}
+}
+
 type Relay struct {
-	xbee *XbeeConnection
+	packets *PacketPair
 	metricIds map[string]uint
 	nextId uint
 	hub HubInterface
 }
 
-func NewRelay(xbee *XbeeConnection, hub HubInterface) (*Relay, error) {
+func NewRelay(packets *PacketPair, hub HubInterface) (*Relay, error) {
 	r := &Relay{
-		xbee: xbee,
+		packets: packets,
 		metricIds: make(map[string]uint),
 		nextId: 0,
 		hub: hub,
@@ -298,7 +310,7 @@ func NewRelay(xbee *XbeeConnection, hub HubInterface) (*Relay, error) {
 
 func (r *Relay) loop() {
 	for {
-		packet, ok := <-r.xbee.RxData()
+		packet, ok := <-r.packets.FromDevice
 		if !ok {
 			log.Println("Relay shutting down")
 			return
@@ -333,7 +345,7 @@ func MakeRelay(serial *SerialPair, hub HubInterface) (*Relay, error) {
 	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
 
-	return NewRelay(xbee, hub)
+	return NewRelay(xbee.IO(), hub)
 }
 
 func main() {
