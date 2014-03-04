@@ -258,7 +258,7 @@ func TestTransmitPacket(t *testing.T) {
 
 // ===============
 
-func ReportsEq(expected, actual *ReportMetricsMessage, t *testing.T) {
+func ReportsEq(expected, actual *ReportMetricsRequest, t *testing.T) {
 	if expected.sender != actual.sender {
 		t.Errorf("ReportMetricsMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
 	}

@@ -10,7 +10,7 @@ import (
 const (
 	REPORT_METRICS_WITH_IDS_MESSAGE_TYPE = 1
 	REGISTER_METRICS_MESSAGE_TYPE = 2
-	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 1
+	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 3
 )
 
 type RegisterMetricsReply struct {
@@ -32,12 +32,30 @@ func (m *RegisterMetricsRequest) DebugString() string {
 	return s + "]"
 }
 
-type ReportMetricsMessage struct {
+type ReportMetricsByNameRequest struct {
+	sender  uint16
+	metrics map[string]int64 // map from name to value
+}
+
+func (m *ReportMetricsByNameRequest) DebugString() string {
+	vals := ""
+	sep := ""
+	for k, v := range m.metrics {
+		vals += fmt.Sprintf("%s{%s=%d}", sep, k, v)
+		sep = ", "
+	}
+	return fmt.Sprintf(
+		"Sender:  0x%x\n"+
+			"Metrics: %s\n",
+		m.sender, vals)
+}
+
+type ReportMetricsRequest struct {
 	sender  uint16
 	metrics map[uint64]int64 // map from id to value
 }
 
-func (m *ReportMetricsMessage) DebugString() string {
+func (m *ReportMetricsRequest) DebugString() string {
 	vals := ""
 	sep := ""
 	for k, v := range m.metrics {
@@ -114,7 +132,7 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func (r *Relay) reportMetrics(report *ReportMetricsMessage) {
+func (r *Relay) reportMetrics(report *ReportMetricsRequest) {
 	log.Printf("Reported metrics: %s", report.DebugString())
 }
 
@@ -175,7 +193,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	log.Printf("method: %d\n", method)
 
 	if method == REPORT_METRICS_WITH_IDS_MESSAGE_TYPE {
-		report := &ReportMetricsMessage{sender: sender}
+		report := &ReportMetricsRequest{sender: sender}
 		err, i, numMetrics := decodeVarUint(data, i)
 		if err != nil {
 			fmt.Println(err)
@@ -243,7 +261,8 @@ func (r *Relay) processPacket(packet *RxPacket) {
 
 type HubInterface interface {
 	RegisterMetrics(request *RegisterMetricsRequest) (*RegisterMetricsReply)
-	ReportMetrics(request *ReportMetricsMessage)
+	ReportMetricsById(request *ReportMetricsRequest)
+	ReportMetricsByName(request *ReportMetricsByNameRequest)
 }
 
 type NoOpHub struct { 
@@ -253,8 +272,10 @@ func (h *NoOpHub) RegisterMetrics(req *RegisterMetricsRequest) (*RegisterMetrics
 	return nil
 }
 
-func (h *NoOpHub) ReportMetrics(req *ReportMetricsMessage) {
+func (h *NoOpHub) ReportMetricsById(req *ReportMetricsRequest) {
+}
 
+func (h *NoOpHub) ReportMetricsByName(req *ReportMetricsByNameRequest) {
 }
 
 type Relay struct {

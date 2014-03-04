@@ -11,7 +11,10 @@ func (h *FakeHub) RegisterMetrics(req *RegisterMetricsRequest) (*RegisterMetrics
 	return nil
 }
 
-func (h *FakeHub) ReportMetrics(req *ReportMetricsMessage) {
+func (h *FakeHub) ReportMetricsById(req *ReportMetricsRequest) {
+}
+
+func (h *FakeHub) ReportMetricsByName(req *ReportMetricsByNameRequest) {
 }
 
 func TestSimple(t *testing.T) {
