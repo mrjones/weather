@@ -263,26 +263,45 @@ func (r *Relay) loop() {
 	}
 }
 
+func (r *Relay) Start() {
+	
+}
+
 func (r *Relay) Shutdown() {
 	
 }
 
+type SerialPair struct {
+	FromDevice chan []byte
+	ToDevice chan []byte
+}
+
+func NewSerialPair(n int) *SerialPair {
+	return &SerialPair{
+		FromDevice: make(chan []byte, n),
+		ToDevice: make(chan []byte, n),
+	}
+}
+func MakeRelay(serial *SerialPair) (*Relay, error) {
+	framesFromDevice := make(chan *XbeeFrame)
+	framesToDevice := make(chan *XbeeFrame)
+	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
+	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
+
+	return NewRelay(xbee)
+}
+
 func main() {
-//	serialPort, err := NewSerialConnection("/dev/ttyAMA0")
 	serial, err := NewSerialChannel("/dev/ttyAMA0")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	framesFromDevice := make(chan *XbeeFrame)
-	framesToDevice := make(chan *XbeeFrame)
-	rawDevice := NewRawXbeeDevice(serial.ReadChannel(), serial.WriteChannel(), framesFromDevice, framesToDevice)
-	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
-
-	relay, err := NewRelay(xbee)
+	relay, err := MakeRelay(serial.Pair())
 	if err != nil {
 		log.Fatal(err)
 	}
+	
 
 	/*
 
@@ -301,5 +320,5 @@ func main() {
 	<-shutdown
 
 	relay.Shutdown()
-	rawDevice.Shutdown()
+//	rawDevice.Shutdown()
 }

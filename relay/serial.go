@@ -29,6 +29,13 @@ func NewSerialChannel(filename string) (*SerialChannel, error) {
 	return sc, nil
 }
 
+func (sc *SerialChannel) Pair() (*SerialPair) {
+	return &SerialPair{
+		FromDevice: sc.readChannel,
+		ToDevice: sc.writeChannel,
+	}
+}
+
 func (sc *SerialChannel) ReadChannel() (<-chan []byte) {
 	return sc.readChannel
 }
