@@ -13,6 +13,7 @@ const (
 	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 3
 )
 
+
 type RegisterMetricsReply struct {
 
 }
@@ -111,6 +112,32 @@ func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
 		offset++
 	}
 	return nil, offset
+}
+
+func decodeString(data []byte, offset uint) (e error, pos uint, s string) {
+	if offset >= uint(len(data)) {
+		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), offset, ""
+	}
+	
+	var err error
+	length := uint64(0)
+
+	err, offset, length = decodeVarUint(data, offset)
+	if err != nil {
+		return err, offset, ""
+	}
+
+	if uint64(offset) + length >= uint64(len(data)) {
+		return fmt.Errorf("Can't parse string of length %d startting at %d. Length is only %d.", length, offset, len(data)), offset, ""
+	}
+
+	chars := make([]byte, length)
+	for i := uint64(0) ; i < length; i++ {
+		chars[i] = data[offset]
+		offset++
+	}
+
+	return nil, offset, string(chars)
 }
 
 func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
@@ -222,7 +249,35 @@ func (r *Relay) processPacket(packet *RxPacket) {
 		}
 		r.reportMetrics(report)
 	} else if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
-		// IMPLEMENT THIS INSTEAD
+		report := &ReportMetricsByNameRequest{sender: sender}
+		err, i, numMetrics := decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Printf("num metrics: %d\n", numMetrics)
+		report.metrics = make(map[string]int64)
+
+		for m := uint64(0); m < numMetrics; m++ {
+			name := ""
+			val := uint64(0)
+			err, i, name = decodeString(data, i)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			err, i, val = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			report.metrics[name] = int64(val)
+			log.Printf("metric[%s]: %d\n", name, report.metrics[name])
+		}
+		r.reports <- report
+		
 	} else if method == REGISTER_METRICS_MESSAGE_TYPE {
 		registration := &RegisterMetricsRequest{}
 		numMetrics := uint64(0)
@@ -259,25 +314,6 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	}
 }
 
-type HubInterface interface {
-	RegisterMetrics(request *RegisterMetricsRequest) (*RegisterMetricsReply)
-	ReportMetricsById(request *ReportMetricsRequest)
-	ReportMetricsByName(request *ReportMetricsByNameRequest)
-}
-
-type NoOpHub struct { 
-}
-
-func (h *NoOpHub) RegisterMetrics(req *RegisterMetricsRequest) (*RegisterMetricsReply) {
-	return nil
-}
-
-func (h *NoOpHub) ReportMetricsById(req *ReportMetricsRequest) {
-}
-
-func (h *NoOpHub) ReportMetricsByName(req *ReportMetricsByNameRequest) {
-}
-
 type PacketPair struct {
 	ToDevice chan *TxPacket
 	FromDevice chan *RxPacket
@@ -294,15 +330,15 @@ type Relay struct {
 	packets *PacketPair
 	metricIds map[string]uint
 	nextId uint
-	hub HubInterface
+	reports chan<- *ReportMetricsByNameRequest
 }
 
-func NewRelay(packets *PacketPair, hub HubInterface) (*Relay, error) {
+func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsByNameRequest) (*Relay, error) {
 	r := &Relay{
 		packets: packets,
 		metricIds: make(map[string]uint),
 		nextId: 0,
-		hub: hub,
+		reports: reports,
 	}
 	go r.loop()
 	return r, nil
@@ -339,13 +375,13 @@ func NewSerialPair(n int) *SerialPair {
 	}
 }
 
-func MakeRelay(serial *SerialPair, hub HubInterface) (*Relay, error) {
+func MakeRelay(serial *SerialPair, reports chan *ReportMetricsByNameRequest) (*Relay, error) {
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
 	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
 
-	return NewRelay(xbee.IO(), hub)
+	return NewRelay(xbee.IO(), reports)
 }
 
 func main() {
@@ -354,7 +390,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	relay, err := MakeRelay(serial.Pair(), &NoOpHub{})
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := MakeRelay(serial.Pair(), reports)
 	if err != nil {
 		log.Fatal(err)
 	}

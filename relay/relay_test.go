@@ -258,9 +258,9 @@ func TestTransmitPacket(t *testing.T) {
 
 // ===============
 
-func ReportsEq(expected, actual *ReportMetricsRequest, t *testing.T) {
+func ReportsEq(expected, actual *ReportMetricsByNameRequest, t *testing.T) {
 	if expected.sender != actual.sender {
-		t.Errorf("ReportMetricsMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
+		t.Errorf("ReportMetricsByNameMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
 	}
 
 	if len(expected.metrics) != len(actual.metrics) {
@@ -270,7 +270,7 @@ func ReportsEq(expected, actual *ReportMetricsRequest, t *testing.T) {
 	for ek, ev := range expected.metrics {
 		av := actual.metrics[ek]
 		if ev != av {
-			t.Errorf("ReportMetricsMessages don't match at metric with id '%d'.\nExpected %d\nActual: %d.", ek, ev, av)
+			t.Errorf("ReportMetricsMessages don't match at metric with name '%s'.\nExpected %d\nActual: %d.", ek, ev, av)
 		}
 	}
 }
@@ -292,30 +292,41 @@ func RegistrationsEq(expected, actual *RegisterMetricsRequest, t *testing.T) {
 	}
 }
 
-/*
 func TestMetricReport(t *testing.T) {
-	packets := make(chan *RxPacket, 1)
-	reports := make(chan *ReportMetricsMessage, 1)
-	registrations := make(chan *RegisterMetricsRequest, 1)
+	packets := NewPacketPair(0)
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := NewRelay(packets, reports)
+	AssertNoError(err, t)
 
-	go HandleReceivedPackets(packets, reports, registrations)
-
-	packets <- &RxPacket{
-		payload: []byte{0x1, 0x1, 0x1, 0x1, 0x1, 0x2, 0x1, 0x1, 0x1, 0x3, 0x1, 0x2, 0x1, 0x4},
+	packets.FromDevice <- &RxPacket{
+		payload: []byte{
+			0x1, 0x1, // Protocol Version
+			0x1, 0x3, // Method ID
+			0x1, 0x2, // Num metrics
+			0x1, 0x3, // metric[0] name length
+			'F', 'O', 'O', // metric[0] name
+			0x1, 0x1, // metric[0] value
+			0x1, 0x3, // metric[0] name length
+			'b', 'a', 'r', // metric[0] name
+			0x1, 0x2, // metric[1] value
+		},
 		sender:  0x2222,
 		rssi:    0x12,
 		options: 0x00,
 	}
 
-	actual := <-reports
+	report := <-reports
 
 	ReportsEq(
-		&ReportMetricsMessage{
+		&ReportMetricsByNameRequest{
 			sender:  0x2222,
-			metrics: map[uint64]int64{1: 3, 2: 4},
-		}, actual, t)
+			metrics: map[string]int64{"FOO": 1, "bar": 2},
+		}, report, t)
+
+	relay.Shutdown()
 }
 
+/*
 func TestMalformedMetricReport(t *testing.T) {
 	packets := make(chan *RxPacket, 1)
 	reports := make(chan *ReportMetricsMessage, 1)

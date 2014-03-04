@@ -4,26 +4,11 @@ import (
 	"testing"
 )
 
-type SimpleHub struct { 
-	requests []*ReportMetricsByNameRequest
-}
-
-func (h *SimpleHub) RegisterMetrics(req *RegisterMetricsRequest) (*RegisterMetricsReply) {
-	return nil
-}
-
-func (h *SimpleHub) ReportMetricsById(req *ReportMetricsRequest) {
-}
-
-func (h *SimpleHub) ReportMetricsByName(req *ReportMetricsByNameRequest) {
-	h.requests = append(h.requests, req)
-}
-
 func TestSimple(t *testing.T) {
 	fakeSerial := NewSerialPair(0)
-	fakeHub := &SimpleHub{}
+	reports := make(chan *ReportMetricsByNameRequest)
 	
-	relay, err := MakeRelay(fakeSerial, fakeHub)
+	relay, err := MakeRelay(fakeSerial, reports)
 	AssertNoError(err, t)
 	relay.Start() // Necessary?
 
