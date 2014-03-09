@@ -389,6 +389,13 @@ func MakeRelay(serial *SerialPair, reports chan *ReportMetricsByNameRequest) (*R
 	return NewRelay(xbee.IO(), reports)
 }
 
+func drainReports(reports <-chan *ReportMetricsByNameRequest) {
+	for {
+		report := <- reports
+		log.Println(report.DebugString())
+	}
+}
+
 func main() {
 	serial, err := NewSerialChannel("/dev/ttyAMA0")
 	if err != nil {
@@ -396,6 +403,7 @@ func main() {
 	}
 
 	reports := make(chan *ReportMetricsByNameRequest)
+	go drainReports(reports)
 	relay, err := MakeRelay(serial.Pair(), reports)
 	if err != nil {
 		log.Fatal(err)
