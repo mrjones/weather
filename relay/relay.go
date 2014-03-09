@@ -3,293 +3,421 @@
 package main
 
 import (
-	"container/list"
 	"fmt"
 	"log"
-	"os"
-	"syscall"
-  "unsafe"
 )
 
 const (
-	FRAME_DELIMITER = 0x7E
-	ESCAPE          = 0x7D
-
-	LENGTH_BYTES = 2
-
-	CHECKSUM_LENGTH = 1
-	RX_PACKET_16BIT = 0x81
-
-	AT_COMMAND = 0x08
+	REPORT_METRICS_WITH_IDS_MESSAGE_TYPE = 1
+	REGISTER_METRICS_MESSAGE_TYPE = 2
+	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 3
 )
 
-const (
-	STATE_OUT_OF_SYNC           = iota
-	STATE_FOUND_FRAME_DELIMITER = iota
-	STATE_PARSED_LENGTH         = iota
-	STATE_CONSUMED_PAYLOAD      = iota
-	STATE_MESSAGE_DONE          = iota
-)
 
-type Accum struct {
-	state                int
-	bytesConsumedInState int
-	payloadLength        int
-	payload              []byte
-	checksum             int
+type RegisterMetricsReply struct {
 
-	messages *list.List
 }
 
-func NewAccum() *Accum {
-	a := &Accum{messages: list.New()}
-	a.reset()
-	return a
+type RegisterMetricsRequest struct {
+	metricNames []string
 }
 
-func (a *Accum) MessagesAvailable() int {
-	return a.messages.Len()
-}
+func (m *RegisterMetricsRequest) DebugString() string {
+	s := "["
+	sep := ""
 
-func (a *Accum) Pop() []byte {
-	e := a.messages.Front()
-	a.messages.Remove(e)
-	return e.Value.([]byte)
-}
-
-func (a *Accum) Consume(data []byte, offset int, len int) error {
-	if offset >= len {
-		return nil
+	for _, r := range m.metricNames {
+		s += r + sep
+		sep = ","
 	}
+	return s + "]"
+}
 
-	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, len))
+type ReportMetricsByNameRequest struct {
+	sender  uint16
+	metrics map[string]int64 // map from name to value
+}
 
-	for {
-		var err error
-		n := 0
-		switch a.state {
-		case STATE_OUT_OF_SYNC:
-			n, err = a.getSync(data, offset, len)
-		case STATE_FOUND_FRAME_DELIMITER:
-			n, err = a.parseLength(data, offset, len)
-		case STATE_PARSED_LENGTH:
-			n, err = a.copyPayload(data, offset, len)
-		case STATE_CONSUMED_PAYLOAD:
-			n, err = a.verifyChecksum(data, offset, len)
-		default:
-			return fmt.Errorf("Internal Error. Unknown state: %d", a.state)
-		}
-
-		if err != nil {
-			return err
-		}
-
-		offset += n
-
-		if offset == len {
-			return nil
-		} else if offset > len {
-			return fmt.Errorf("Internal Error. Buffer overrun (%d > %d)",
-				offset, len)
-		}
+func (m *ReportMetricsByNameRequest) DebugString() string {
+	vals := ""
+	sep := ""
+	for k, v := range m.metrics {
+		vals += fmt.Sprintf("%s{%s=%d}", sep, k, v)
+		sep = ", "
 	}
+	return fmt.Sprintf(
+		"Sender:  0x%x\n"+
+			"Metrics: %s\n",
+		m.sender, vals)
 }
 
-func (a *Accum) transition(state int) {
-	a.state = state
-	a.bytesConsumedInState = 0
+type ReportMetricsRequest struct {
+	sender  uint16
+	metrics map[uint64]int64 // map from id to value
 }
 
-func (a *Accum) reset() {
-	a.payloadLength = 0
-	a.checksum = 0
-	a.transition(STATE_OUT_OF_SYNC)
+func (m *ReportMetricsRequest) DebugString() string {
+	vals := ""
+	sep := ""
+	for k, v := range m.metrics {
+		vals += fmt.Sprintf("%s{%d=%d}", sep, k, v)
+		sep = ", "
+	}
+	return fmt.Sprintf(
+		"Sender:  0x%x\n"+
+			"Metrics: %s\n",
+		m.sender, vals)
 }
 
 func arrayAsHex(a []byte) string {
 	return arrayAsHexWithLen(a, len(a))
 }
 
-func arrayAsHexWithLen(a []byte, len int) string {
+func arrayAsHexWithLen(a []byte, length int) string {
 	s := "[ "
-	for i := 0; i < len; i++ {
+	for i := 0; i < length; i++ {
 		s += fmt.Sprintf("0x%x ", a[i])
 	}
 	s += "]"
 	return s
 }
 
-func (a *Accum) verifyChecksum(data []byte, offset int, len int) (int, error) {
-	a.checksum = int(data[offset])
-
-	v := 0
-	for i := 0; i < a.payloadLength; i++ {
-		v = (v + int(a.payload[i])) & 0xFF
+func encodeString(data *[]byte, offset uint, s string) (e error, pos uint) {
+	length := uint(len(s))
+	err, offset := encodeVarUint(data, offset, length)
+	if err != nil {
+		return err, offset
 	}
 
-	v = (v + a.checksum) & 0xFF
-
-	if v == 0xFF {
-		a.messages.PushBack(a.payload)
-		a.reset()
-	} else {
-		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
+	if offset + length > uint(len(*data)) {
+		return fmt.Errorf("Buffer overrun (encoding string %s) %d vs. %d.", s, offset, len(*data)), offset
+		
 	}
 
-	return 1, nil
-}
-
-func (a *Accum) copyPayload(data []byte, offset int, len int) (int, error) {
-	if a.bytesConsumedInState == 0 {
-		a.payload = make([]byte, a.payloadLength)
-	}
-
-	consumed := 0
-	for offset < len && a.bytesConsumedInState < a.payloadLength {
-		a.payload[a.bytesConsumedInState] = data[offset]
+	for i := uint(0); i < length; i++ {
+		(*data)[offset] = s[i]
 		offset++
-		a.bytesConsumedInState++
-		consumed++
 	}
 
-	if a.bytesConsumedInState == a.payloadLength {
-		a.transition(STATE_CONSUMED_PAYLOAD)
-	}
-
-	return consumed, nil
+	return nil, offset
 }
 
-func (a *Accum) parseLength(data []byte, offset int, len int) (int, error) {
-	a.payloadLength = (a.payloadLength << 8) + int(data[offset])
-	a.bytesConsumedInState++
-
-	if a.bytesConsumedInState == LENGTH_BYTES {
-		a.transition(STATE_PARSED_LENGTH)
+func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
+	for n > 0 {
+		if offset >= uint(len(*data)) {
+			return fmt.Errorf("Buffer overrun (encoding varint %d) %d vs. %d.", n, offset, len(*data)), offset
+		}
+		(*data)[offset] = byte(n & 0xFF)
+		n = n >> 8
+		offset++
 	}
-
-	return 1, nil
+	return nil, offset
 }
 
-func (a *Accum) getSync(data []byte, offset int, len int) (int, error) {
-	if data[offset] == FRAME_DELIMITER {
-		a.transition(STATE_FOUND_FRAME_DELIMITER)
+func decodeString(data []byte, offset uint) (e error, pos uint, s string) {
+	if offset >= uint(len(data)) {
+		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), offset, ""
+	}
+	
+	var err error
+	length := uint64(0)
+
+	err, offset, length = decodeVarUint(data, offset)
+	if err != nil {
+		return err, offset, ""
 	}
 
-	return 1, nil
+	if uint64(offset) + length >= uint64(len(data)) {
+		return fmt.Errorf("Can't parse string of length %d startting at %d. Length is only %d.", length, offset, len(data)), offset, ""
+	}
+
+	chars := make([]byte, length)
+	for i := uint64(0) ; i < length; i++ {
+		chars[i] = data[offset]
+		offset++
+	}
+
+	return nil, offset, string(chars)
 }
 
-type Frame struct {
-	length   uint16
-	payload  []byte
-	checksum uint8
+func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
+	if offset >= uint(len(data)) {
+		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), 0, 0
+	}
+
+	width := uint(data[offset])
+
+	if offset+1+width > uint(len(data)) {
+		return fmt.Errorf("Can't parse value of width %d startting at %d. Length is only %d.", width, offset+1, len(data)), 0, 0
+	}
+
+	val = 0
+	for i := uint(0); i < width; i++ {
+		val += uint64(data[offset+i+1]) << (8 * i)
+	}
+
+	return nil, offset + 1 + width, val
 }
 
-func NewFrame(payload []byte) *Frame {
-	length := len(payload)
-	sum := uint8(0)
-	for i := 0; i < length; i++ {
-		sum = (sum + uint8(payload[i])) & 0xFF
-	}
-	checksum := 0xFF - sum
+func (r *Relay) reportMetrics(report *ReportMetricsRequest) {
+	log.Printf("Reported metrics: %s", report.DebugString())
+}
 
-	return &Frame{
-		length:   uint16(length),
-		payload:  payload,
-		checksum: checksum,
+func (r *Relay) registerMetrics(registration *RegisterMetricsRequest) {
+	data := make([]byte, 1024)
+	offset := uint(0)
+	var err error
+	log.Printf("Registered metrics: %s", registration.DebugString())
+	for _, name := range registration.metricNames {
+		id, ok := r.metricIds[name]
+		if !ok {
+			id = r.nextId
+			r.nextId++
+			r.metricIds[name] = id
+		}
+
+		err, offset = encodeVarUint(&data, offset, id)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+
+		err, offset = encodeString(&data, offset, name)
+		if err != nil {
+			log.Print(err)
+			return
+		}
+	}
+
+	log.Printf("Response: %s\n", arrayAsHex(data[0:offset]))
+}
+
+func (r *Relay) processPacket(packet *RxPacket) {
+	data := packet.payload
+	sender := packet.sender
+
+	log.Printf("Payload: %s\n", arrayAsHex(data))
+	log.Printf("Sender:  0x%x\n", sender)
+	i := uint(0)
+
+	err, i, protocolVersion := decodeVarUint(data, i)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	if protocolVersion != 1 {
+		fmt.Println(fmt.Errorf("Unsupported protocol version %d.", protocolVersion))
+		return
+	}
+
+	log.Printf("protocol version: %d\n", protocolVersion)
+
+	err, i, method := decodeVarUint(data, i)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	log.Printf("method: %d\n", method)
+
+	if method == REPORT_METRICS_WITH_IDS_MESSAGE_TYPE {
+		report := &ReportMetricsRequest{sender: sender}
+		err, i, numMetrics := decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Printf("num metrics: %d\n", numMetrics)
+		report.metrics = make(map[uint64]int64)
+
+		for m := uint64(0); m < numMetrics; m++ {
+			mid := uint64(0)
+			val := uint64(0)
+			err, i, mid = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			err, i, val = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			report.metrics[mid] = int64(val)
+			log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
+		}
+		r.reportMetrics(report)
+	} else if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
+		report := &ReportMetricsByNameRequest{sender: sender}
+		err, i, numMetrics := decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Printf("num metrics: %d\n", numMetrics)
+		report.metrics = make(map[string]int64)
+
+		for m := uint64(0); m < numMetrics; m++ {
+			name := ""
+			val := uint64(0)
+			err, i, name = decodeString(data, i)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			err, i, val = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			report.metrics[name] = int64(val)
+			log.Printf("metric[%s]: %d\n", name, report.metrics[name])
+		}
+		r.reports <- report
+		
+	} else if method == REGISTER_METRICS_MESSAGE_TYPE {
+		registration := &RegisterMetricsRequest{}
+		numMetrics := uint64(0)
+		err, i, numMetrics = decodeVarUint(data, i)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		log.Printf("num metrics: %d\n", numMetrics)
+		registration.metricNames = make([]string, numMetrics)
+			
+		for m := uint64(0); m < numMetrics; m++ {
+			chars := uint64(0)
+			err, i, chars = decodeVarUint(data, i)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			registration.metricNames[m] = ""
+			for c := uint64(0); c < chars; c++ {
+				if i >= uint(len(data)) {
+					fmt.Println("Write a better error message")
+					continue
+				}
+				registration.metricNames[m] += string(data[i])
+				i++
+			}
+		}
+
+		r.registerMetrics(registration)
+	} else {
+		fmt.Println(fmt.Errorf("Unknown method %d", method))
 	}
 }
 
-func (f *Frame) Serialize() []byte {
-	data := make([]byte, f.length+4)
-	data[0] = 0x7E
-	data[1] = byte(f.length >> 8)
-	data[2] = byte(f.length & 0xFF)
-	for i := uint16(0); i < f.length; i++ {
-		data[3+i] = f.payload[i]
-	}
-	data[f.length+3] = f.checksum
-	return data
+type PacketPair struct {
+	ToDevice chan *TxPacket
+	FromDevice chan *RxPacket
 }
 
-func configureSerial(file *os.File) {
-	fd := file.Fd()
-	t := syscall.Termios{
-		Iflag:  0,
-		Cflag:  syscall.CS8 | syscall.CREAD | syscall.CLOCAL | syscall.B9600,
-		Cc:     [32]uint8{syscall.VMIN: 1},
-		Ispeed: syscall.B9600,
-		Ospeed: syscall.B9600,
+func NewPacketPair(capacity int) *PacketPair {
+	return &PacketPair{
+		ToDevice: make(chan *TxPacket, capacity),
+		FromDevice: make(chan *RxPacket, capacity),
 	}
+}
 
-	if _, _, errno := syscall.Syscall6(
-		syscall.SYS_IOCTL,
-		uintptr(fd),
-		uintptr(syscall.TCSETS),
-		uintptr(unsafe.Pointer(&t)),
-		0,
-		0,
-		0,
-	); errno != 0 {
-		log.Fatalf("Errno configuring serial port: %d\n", errno)
+type Relay struct {
+	packets *PacketPair
+	metricIds map[string]uint
+	nextId uint
+	reports chan<- *ReportMetricsByNameRequest
+	shutdown bool
+}
+
+func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsByNameRequest) (*Relay, error) {
+	r := &Relay{
+		packets: packets,
+		metricIds: make(map[string]uint),
+		nextId: 0,
+		reports: reports,
 	}
+	go r.loop()
+	return r, nil
+}
+
+func (r *Relay) loop() {
+	for {
+		packet, ok := <-r.packets.FromDevice
+		if !ok {
+			log.Println("Relay shutting down")
+			r.Shutdown()
+			return
+		}
+		r.processPacket(packet)
+	}
+}
+
+func (r *Relay) Start() {
+	
+}
+
+func (r *Relay) Shutdown() {
+	if !r.shutdown {
+		close(r.reports) // need a mutex here?
+		r.shutdown = true
+	}
+}
+
+type SerialPair struct {
+	FromDevice chan []byte
+	ToDevice chan []byte
+}
+
+func NewSerialPair(n int) *SerialPair {
+	return &SerialPair{
+		FromDevice: make(chan []byte, n),
+		ToDevice: make(chan []byte, n),
+	}
+}
+
+func MakeRelay(serial *SerialPair, reports chan *ReportMetricsByNameRequest) (*Relay, error) {
+	framesFromDevice := make(chan *XbeeFrame)
+	framesToDevice := make(chan *XbeeFrame)
+	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
+	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
+
+	return NewRelay(xbee.IO(), reports)
 }
 
 func main() {
-	serialPort := "/dev/ttyAMA0"
-
-	file, err := os.OpenFile(serialPort, syscall.O_RDWR|syscall.O_NOCTTY, 0666)
+	serial, err := NewSerialChannel("/dev/ttyAMA0")
 	if err != nil {
 		log.Fatal(err)
 	}
-	configureSerial(file)
 
-	log.Printf("Opened '%s'\n", serialPort)
-
-	buf := make([]byte, 128)
-	accum := NewAccum()
-
-	// ND doesn't work
-		f := NewFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
-		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
-
-		wn, err := file.Write(f.Serialize())
-		if err != nil {
-			log.Println(err)
-		} else {
-			log.Printf("Write %d bytes\n", wn)
-		}
-	for {
-		n, err := file.Read(buf)
-		log.Printf("Read %d bytes\n", n)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = accum.Consume(buf, 0, n)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		for accum.MessagesAvailable() > 0 {
-			data := accum.Pop()
-
-			if data[0] == RX_PACKET_16BIT {
-				senderAddr := (int(data[1]) << 8) + int(data[2])
-				strength := int(data[3])
-				options := int(data[4])
-				log.Printf("RSSI:    -%d dBm\n", strength)
-				log.Printf("Sender:  0x%x\n", senderAddr)
-				log.Printf("Options: 0x%x\n", options)
-				payloadLength := len(data) - 5
-				var payload = make([]byte, payloadLength)
-				for i := 0; i < payloadLength; i++ {
-					payload[i] = data[i+5]
-				}
-
-				log.Printf("Payload: %s\n", arrayAsHex(payload))
-			} else {
-				fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
-			}
-		}
+	reports := make(chan *ReportMetricsByNameRequest)
+	relay, err := MakeRelay(serial.Pair(), reports)
+	if err != nil {
+		log.Fatal(err)
 	}
+	
+
+	/*
+
+	f := NewXbeeFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
+	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
+
+	wn, err := file.Write(f.Serialize())
+	if err != nil {
+		log.Println(err)
+	} else {
+		log.Printf("Write %d bytes\n", wn)
+	}
+*/
+
+	shutdown := make(chan bool)
+	<-shutdown
+
+	relay.Shutdown()
+//	rawDevice.Shutdown()
 }
