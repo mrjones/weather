@@ -16,6 +16,7 @@ const int XBEE_TX_PIN = 8;  // connected to RX on the XBee
 #include <Wire.h>
 #include <SoftwareSerial.h>
 
+const int LED_PIN = 13;
 
 const int NONE = 0;
 const int SOME = 1;
@@ -26,6 +27,8 @@ const int debug = SOME;
 SoftwareSerial xbee = SoftwareSerial(XBEE_RX_PIN, XBEE_TX_PIN);
 
 void setup() {
+  pinMode(LED_PIN, OUTPUT);
+
   Serial.begin(9600);
   xbee.begin(9600);
   Wire.begin();
@@ -38,23 +41,44 @@ void setup() {
   xbeeSetup();
 }
 
+void blink(int count, int howLongMs) {
+  for (int i = 0; i < count; i++) {
+    digitalWrite(LED_PIN, HIGH);
+    delay(howLongMs);
+    digitalWrite(LED_PIN, LOW);
+    delay(howLongMs);
+  }
+}
+
 void loop() {
   float relHumidity;
   float tempF;
   boolean hasData = fetchData(&relHumidity, &tempF);
   
+  blink(1, 100);
+
   if (hasData) {
+    blink(2, 200);
     Serial.print("Humidity: ");
     Serial.println((int)relHumidity);
     Serial.print("Temperature: ");
     Serial.println((int)tempF);
 
-    xbeeSendFixedU32((unsigned long)1);  // method id
-    xbeeSendFixedU32((unsigned long)2);  // num metrics    
-    xbeeSendFixedU32((unsigned long)1);  // TODO: negotiate metric IDs
+    xbeeSendVarUint((unsigned long)1);  // protocol version id
+    xbeeSendVarUint((unsigned long)3);  // method id
+    xbeeSendVarUint((unsigned long)2);  // num metrics    
+    xbeeSendString("es.mrjon.relativeHumidity");
     xbeeSendVarUint((unsigned long)relHumidity);
-    xbeeSendFixedU32((unsigned long)2);  // TODO: negotiate metric IDs
+    xbeeSendString("es.mrjon.temperatureF");
     xbeeSendVarUint((unsigned long)tempF);
+
+//    xbeeSendVarUint((unsigned long)1);  // protocol version id
+//    xbeeSendVarUint((unsigned long)1);  // method id
+//    xbeeSendVarUint((unsigned long)2);  // num metrics    
+//    xbeeSendVarUint((unsigned long)1);  // TODO: negotiate metric IDs
+//    xbeeSendVarUint((unsigned long)relHumidity);
+//    xbeeSendVarUint((unsigned long)2);  // TODO: negotiate metric IDs
+//    xbeeSendVarUint((unsigned long)tempF);
   }
   
   delay(10 * 1000);
@@ -183,6 +207,19 @@ void xbeeSendVarUint(unsigned long val) {
   }
 
   xbee.write(data, width + 1);
+}
+
+void xbeeSendString(String s) {
+  int length = s.length();
+
+
+  byte data[length];
+  for (int i = 0; i < length; i++) {
+    data[i] = s.charAt(i);
+  }
+
+  xbeeSendVarUint(length);
+  xbee.write(data, length);
 }
 
 void xbeeSendFixedU32(unsigned long val) {
