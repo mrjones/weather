@@ -8,30 +8,9 @@ import (
 )
 
 const (
-	REPORT_METRICS_WITH_IDS_MESSAGE_TYPE = 1
-	REGISTER_METRICS_MESSAGE_TYPE = 2
 	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 3
 )
 
-
-type RegisterMetricsReply struct {
-
-}
-
-type RegisterMetricsRequest struct {
-	metricNames []string
-}
-
-func (m *RegisterMetricsRequest) DebugString() string {
-	s := "["
-	sep := ""
-
-	for _, r := range m.metricNames {
-		s += r + sep
-		sep = ","
-	}
-	return s + "]"
-}
 
 type ReportMetricsByNameRequest struct {
 	sender  uint16
@@ -43,24 +22,6 @@ func (m *ReportMetricsByNameRequest) DebugString() string {
 	sep := ""
 	for k, v := range m.metrics {
 		vals += fmt.Sprintf("%s{%s=%d}", sep, k, v)
-		sep = ", "
-	}
-	return fmt.Sprintf(
-		"Sender:  0x%x\n"+
-			"Metrics: %s\n",
-		m.sender, vals)
-}
-
-type ReportMetricsRequest struct {
-	sender  uint16
-	metrics map[uint64]int64 // map from id to value
-}
-
-func (m *ReportMetricsRequest) DebugString() string {
-	vals := ""
-	sep := ""
-	for k, v := range m.metrics {
-		vals += fmt.Sprintf("%s{%d=%d}", sep, k, v)
 		sep = ", "
 	}
 	return fmt.Sprintf(
@@ -159,39 +120,6 @@ func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
 	return nil, offset + 1 + width, val
 }
 
-func (r *Relay) reportMetrics(report *ReportMetricsRequest) {
-	log.Printf("Reported metrics: %s", report.DebugString())
-}
-
-func (r *Relay) registerMetrics(registration *RegisterMetricsRequest) {
-	data := make([]byte, 1024)
-	offset := uint(0)
-	var err error
-	log.Printf("Registered metrics: %s", registration.DebugString())
-	for _, name := range registration.metricNames {
-		id, ok := r.metricIds[name]
-		if !ok {
-			id = r.nextId
-			r.nextId++
-			r.metricIds[name] = id
-		}
-
-		err, offset = encodeVarUint(&data, offset, id)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-
-		err, offset = encodeString(&data, offset, name)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-	}
-
-	log.Printf("Response: %s\n", arrayAsHex(data[0:offset]))
-}
-
 func (r *Relay) processPacket(packet *RxPacket) {
 	data := packet.payload
 	sender := packet.sender
@@ -219,36 +147,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	}
 	log.Printf("method: %d\n", method)
 
-	if method == REPORT_METRICS_WITH_IDS_MESSAGE_TYPE {
-		report := &ReportMetricsRequest{sender: sender}
-		err, i, numMetrics := decodeVarUint(data, i)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		log.Printf("num metrics: %d\n", numMetrics)
-		report.metrics = make(map[uint64]int64)
-
-		for m := uint64(0); m < numMetrics; m++ {
-			mid := uint64(0)
-			val := uint64(0)
-			err, i, mid = decodeVarUint(data, i)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			err, i, val = decodeVarUint(data, i)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			report.metrics[mid] = int64(val)
-			log.Printf("metric[%d]: %d\n", mid, report.metrics[mid])
-		}
-		r.reportMetrics(report)
-	} else if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
+	if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
 		report := &ReportMetricsByNameRequest{sender: sender}
 		err, i, numMetrics := decodeVarUint(data, i)
 		if err != nil {
@@ -278,37 +177,6 @@ func (r *Relay) processPacket(packet *RxPacket) {
 		}
 		r.reports <- report
 		
-	} else if method == REGISTER_METRICS_MESSAGE_TYPE {
-		registration := &RegisterMetricsRequest{}
-		numMetrics := uint64(0)
-		err, i, numMetrics = decodeVarUint(data, i)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		log.Printf("num metrics: %d\n", numMetrics)
-		registration.metricNames = make([]string, numMetrics)
-			
-		for m := uint64(0); m < numMetrics; m++ {
-			chars := uint64(0)
-			err, i, chars = decodeVarUint(data, i)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			registration.metricNames[m] = ""
-			for c := uint64(0); c < chars; c++ {
-				if i >= uint(len(data)) {
-					fmt.Println("Write a better error message")
-					continue
-				}
-				registration.metricNames[m] += string(data[i])
-				i++
-			}
-		}
-
-		r.registerMetrics(registration)
 	} else {
 		fmt.Println(fmt.Errorf("Unknown method %d", method))
 	}

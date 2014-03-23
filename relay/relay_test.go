@@ -275,23 +275,6 @@ func ReportsEq(expected, actual *ReportMetricsByNameRequest, t *testing.T) {
 	}
 }
 
-func RegistrationsEq(expected, actual *RegisterMetricsRequest, t *testing.T) {
-/*
-	if expected.sender != actual.sender {
-		t.Errorf("RegisterMetricsRequests don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
-	}
-*/
-	if len(expected.metricNames) != len(actual.metricNames) {
-		t.Errorf("RegisterMetricsRequests don't match in 'len(metricNames)' param.\nExpected: %d.\nActual: %d.", len(expected.metricNames), len(actual.metricNames))
-	}
-
-	for i := 0 ; i < len(expected.metricNames) && i < len(actual.metricNames); i++ {
-		if expected.metricNames[i] != actual.metricNames[i] {
-			t.Errorf("RegisterMetricsRequests don't match at metric[%d].\nExpected: %s.\nActual: %s.", i, expected.metricNames[i], actual.metricNames[i])
-		}
-	}
-}
-
 func TestMetricReport(t *testing.T) {
 	packets := NewPacketPair(0)
 	reports := make(chan *ReportMetricsByNameRequest)
