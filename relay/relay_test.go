@@ -7,13 +7,13 @@ import (
 
 type FramePair struct {
 	FromDevice chan *XbeeFrame
-	ToDevice chan *XbeeFrame
+	ToDevice   chan *XbeeFrame
 }
 
 func NewFramePair(n int) *FramePair {
 	return &FramePair{
 		FromDevice: make(chan *XbeeFrame, n),
-		ToDevice: make(chan *XbeeFrame, n),
+		ToDevice:   make(chan *XbeeFrame, n),
 	}
 }
 
@@ -49,7 +49,7 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 	frames := NewFramePair(0)
 	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
 
-	serial.FromDevice <-[]byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
+	serial.FromDevice <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 
 	actual := <-frames.FromDevice
 	device.Shutdown()
@@ -138,12 +138,12 @@ func TestToDevicesFrames(t *testing.T) {
 	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
 
 	frames.ToDevice <- &XbeeFrame{
-		length: 3,
-		payload: []byte{0x12, 0x34, 0x56},
+		length:   3,
+		payload:  []byte{0x12, 0x34, 0x56},
 		checksum: 0x63,
 	}
 
-	actual := <- serial.ToDevice
+	actual := <-serial.ToDevice
 	device.Shutdown()
 
 	ArraysEq([]byte{0x7E, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}, actual, t)
@@ -237,24 +237,23 @@ func TestTransmitPacket(t *testing.T) {
 	frames := NewFramePair(0)
 	conn := NewXbeeConnection(frames.FromDevice, frames.ToDevice)
 
-	packet := &TxPacket {
-		payload: []byte{0x12, 0x34, 0x56},
+	packet := &TxPacket{
+		payload:     []byte{0x12, 0x34, 0x56},
 		destination: 0x2222,
-		options: 0x01,  // Disable ACK
+		options:     0x01, // Disable ACK
 	}
 
 	conn.TxData() <- packet
 
-	actual := <- frames.ToDevice
+	actual := <-frames.ToDevice
 
 	FramesEq(
 		&XbeeFrame{
-			length: 8,
-			payload: []byte{0x01, 0x00, 0x22, 0x22, 0x01, 0x12, 0x34, 0x56},
+			length:   8,
+			payload:  []byte{0x01, 0x00, 0x22, 0x22, 0x01, 0x12, 0x34, 0x56},
 			checksum: 0xF7,
 		}, actual, t)
 }
-
 
 // ===============
 

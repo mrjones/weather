@@ -11,7 +11,6 @@ const (
 	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 3
 )
 
-
 type ReportMetricsArg struct {
 	sender  uint16
 	metrics map[string]int64 // map from name to value
@@ -50,9 +49,9 @@ func encodeString(data *[]byte, offset uint, s string) (e error, pos uint) {
 		return err, offset
 	}
 
-	if offset + length > uint(len(*data)) {
+	if offset+length > uint(len(*data)) {
 		return fmt.Errorf("Buffer overrun (encoding string %s) %d vs. %d.", s, offset, len(*data)), offset
-		
+
 	}
 
 	for i := uint(0); i < length; i++ {
@@ -79,7 +78,7 @@ func decodeString(data []byte, offset uint) (e error, pos uint, s string) {
 	if offset >= uint(len(data)) {
 		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), offset, ""
 	}
-	
+
 	var err error
 	length := uint64(0)
 
@@ -88,12 +87,12 @@ func decodeString(data []byte, offset uint) (e error, pos uint, s string) {
 		return err, offset, ""
 	}
 
-	if uint64(offset) + length >= uint64(len(data)) {
+	if uint64(offset)+length >= uint64(len(data)) {
 		return fmt.Errorf("Can't parse string of length %d startting at %d. Length is only %d.", length, offset, len(data)), offset, ""
 	}
 
 	chars := make([]byte, length)
-	for i := uint64(0) ; i < length; i++ {
+	for i := uint64(0); i < length; i++ {
 		chars[i] = data[offset]
 		offset++
 	}
@@ -176,38 +175,38 @@ func (r *Relay) processPacket(packet *RxPacket) {
 			log.Printf("metric[%s]: %d\n", name, report.metrics[name])
 		}
 		r.reports <- report
-		
+
 	} else {
 		fmt.Println(fmt.Errorf("Unknown method %d", method))
 	}
 }
 
 type PacketPair struct {
-	ToDevice chan *TxPacket
+	ToDevice   chan *TxPacket
 	FromDevice chan *RxPacket
 }
 
 func NewPacketPair(capacity int) *PacketPair {
 	return &PacketPair{
-		ToDevice: make(chan *TxPacket, capacity),
+		ToDevice:   make(chan *TxPacket, capacity),
 		FromDevice: make(chan *RxPacket, capacity),
 	}
 }
 
 type Relay struct {
-	packets *PacketPair
+	packets   *PacketPair
 	metricIds map[string]uint
-	nextId uint
-	reports chan<- *ReportMetricsArg
-	shutdown bool
+	nextId    uint
+	reports   chan<- *ReportMetricsArg
+	shutdown  bool
 }
 
 func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg) (*Relay, error) {
 	r := &Relay{
-		packets: packets,
+		packets:   packets,
 		metricIds: make(map[string]uint),
-		nextId: 0,
-		reports: reports,
+		nextId:    0,
+		reports:   reports,
 	}
 	go r.loop()
 	return r, nil
@@ -226,7 +225,7 @@ func (r *Relay) loop() {
 }
 
 func (r *Relay) Start() {
-	
+
 }
 
 func (r *Relay) Shutdown() {
@@ -238,13 +237,13 @@ func (r *Relay) Shutdown() {
 
 type SerialPair struct {
 	FromDevice chan []byte
-	ToDevice chan []byte
+	ToDevice   chan []byte
 }
 
 func NewSerialPair(n int) *SerialPair {
 	return &SerialPair{
 		FromDevice: make(chan []byte, n),
-		ToDevice: make(chan []byte, n),
+		ToDevice:   make(chan []byte, n),
 	}
 }
 
@@ -252,14 +251,14 @@ func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg) (*Relay, erro
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
 	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
-	xbee := NewXbeeConnection(framesFromDevice, framesToDevice);
+	xbee := NewXbeeConnection(framesFromDevice, framesToDevice)
 
 	return NewRelay(xbee.IO(), reports)
 }
 
 func drainReports(reports <-chan *ReportMetricsArg) {
 	for {
-		report := <- reports
+		report := <-reports
 		log.Println(report.DebugString())
 	}
 }
@@ -276,24 +275,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	
 
 	/*
 
-	f := NewXbeeFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
-	log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
+		f := NewXbeeFrame([]byte{AT_COMMAND, 0x52, 'M', 'Y'})
+		log.Printf("Framer %s\n", arrayAsHex(f.Serialize()))
 
-	wn, err := file.Write(f.Serialize())
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Printf("Write %d bytes\n", wn)
-	}
-*/
+		wn, err := file.Write(f.Serialize())
+		if err != nil {
+			log.Println(err)
+		} else {
+			log.Printf("Write %d bytes\n", wn)
+		}
+	*/
 
 	shutdown := make(chan bool)
 	<-shutdown
 
 	relay.Shutdown()
-//	rawDevice.Shutdown()
+	//	rawDevice.Shutdown()
 }

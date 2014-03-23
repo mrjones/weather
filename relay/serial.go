@@ -9,8 +9,8 @@ import (
 
 type SerialChannel struct {
 	underlyingFile *os.File
-	readChannel chan []byte
-	writeChannel chan []byte
+	readChannel    chan []byte
+	writeChannel   chan []byte
 }
 
 func NewSerialChannel(filename string) (*SerialChannel, error) {
@@ -19,28 +19,28 @@ func NewSerialChannel(filename string) (*SerialChannel, error) {
 		return nil, err
 	}
 
-	configureSerial(file);
+	configureSerial(file)
 	sc := &SerialChannel{
 		underlyingFile: file,
-		readChannel: make(chan []byte),
-		writeChannel: make(chan []byte),
+		readChannel:    make(chan []byte),
+		writeChannel:   make(chan []byte),
 	}
 	go sc.readLoop()
 	return sc, nil
 }
 
-func (sc *SerialChannel) Pair() (*SerialPair) {
+func (sc *SerialChannel) Pair() *SerialPair {
 	return &SerialPair{
 		FromDevice: sc.readChannel,
-		ToDevice: sc.writeChannel,
+		ToDevice:   sc.writeChannel,
 	}
 }
 
-func (sc *SerialChannel) ReadChannel() (<-chan []byte) {
+func (sc *SerialChannel) ReadChannel() <-chan []byte {
 	return sc.readChannel
 }
 
-func (sc *SerialChannel) WriteChannel() (chan<- []byte) {
+func (sc *SerialChannel) WriteChannel() chan<- []byte {
 	return sc.writeChannel
 }
 
