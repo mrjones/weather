@@ -178,7 +178,7 @@ func TestConsumeRxFrame(t *testing.T) {
 		payload:  []byte{0x81, 0x22, 0x22, 0x28, 0x01, 0x12, 0x34, 0x56},
 		checksum: 0x00}
 
-	actual := <-conn.RxData()
+	actual := <-conn.IO().FromDevice
 
 	PacketsEq(
 		&RxPacket{
@@ -200,7 +200,7 @@ func TestMalformedRxFrame_TooShort(t *testing.T) {
 
 	close(frames.FromDevice)
 
-	packet, ok := <-conn.RxData()
+	packet, ok := <-conn.IO().FromDevice
 
 	if packet != nil {
 		t.Errorf("Got an unexpected packet while processing a malformed frame")
@@ -222,7 +222,7 @@ func TestIgnoresUnknownFrames(t *testing.T) {
 
 	close(frames.FromDevice)
 
-	packet, ok := <-conn.RxData()
+	packet, ok := <-conn.IO().FromDevice
 
 	if packet != nil {
 		t.Errorf("Got an unexpected packet after reading a garbage frame")
@@ -243,7 +243,7 @@ func TestTransmitPacket(t *testing.T) {
 		options:     0x01, // Disable ACK
 	}
 
-	conn.TxData() <- packet
+	conn.IO().ToDevice <- packet
 
 	actual := <-frames.ToDevice
 

@@ -181,18 +181,6 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	}
 }
 
-type PacketPair struct {
-	ToDevice   chan *TxPacket
-	FromDevice chan *RxPacket
-}
-
-func NewPacketPair(capacity int) *PacketPair {
-	return &PacketPair{
-		ToDevice:   make(chan *TxPacket, capacity),
-		FromDevice: make(chan *RxPacket, capacity),
-	}
-}
-
 type Relay struct {
 	packets   *PacketPair
 	metricIds map[string]uint
@@ -224,9 +212,7 @@ func (r *Relay) loop() {
 	}
 }
 
-func (r *Relay) Start() {
-
-}
+func (r *Relay) Start() { }
 
 func (r *Relay) Shutdown() {
 	if !r.shutdown {

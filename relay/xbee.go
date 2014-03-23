@@ -25,6 +25,31 @@ const (
 	STATE_MESSAGE_DONE          = iota
 )
 
+type RxPacket struct {
+	payload []byte
+	sender  uint16
+	rssi    uint8
+	options byte
+}
+
+type TxPacket struct {
+	payload     []byte
+	destination uint16
+	options     uint8
+}
+
+type PacketPair struct {
+	ToDevice   chan *TxPacket
+	FromDevice chan *RxPacket
+}
+
+func NewPacketPair(capacity int) *PacketPair {
+	return &PacketPair{
+		ToDevice:   make(chan *TxPacket, capacity),
+		FromDevice: make(chan *RxPacket, capacity),
+	}
+}
+
 type XbeeConnection struct {
 	rxData      chan *RxPacket
 	txData      chan *TxPacket
@@ -43,6 +68,22 @@ func NewXbeeConnection(readFrames <-chan *XbeeFrame, writeFrames chan<- *XbeeFra
 	go connection.processIncomingFrames()
 
 	return connection
+}
+
+func (x *XbeeConnection) IO() *PacketPair {
+	return &PacketPair{
+		FromDevice: x.rxData,
+		ToDevice:   x.txData,
+	}
+}
+
+func (d *RxPacket) DebugString() string {
+	return fmt.Sprintf(
+		"RSSI:    -%d dBm\n"+
+			"Sender:  0x%x\n"+
+			"Options: 0x%x\n"+
+			"Payload: %s\n",
+		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
 }
 
 func (x *XbeeConnection) processIncomingFrames() {
@@ -117,43 +158,6 @@ func (x *XbeeConnection) processIncomingFrame(frame *XbeeFrame) {
 	} else {
 		fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
 	}
-}
-
-func (x *XbeeConnection) TxData() chan<- *TxPacket {
-	return x.txData
-}
-
-type TxPacket struct {
-	payload     []byte
-	destination uint16
-	options     uint8
-}
-
-func (x *XbeeConnection) IO() *PacketPair {
-	return &PacketPair{
-		FromDevice: x.rxData,
-		ToDevice:   x.txData,
-	}
-}
-
-func (x *XbeeConnection) RxData() <-chan *RxPacket {
-	return x.rxData
-}
-
-type RxPacket struct {
-	payload []byte
-	sender  uint16
-	rssi    uint8
-	options byte
-}
-
-func (d *RxPacket) DebugString() string {
-	return fmt.Sprintf(
-		"RSSI:    -%d dBm\n"+
-			"Sender:  0x%x\n"+
-			"Options: 0x%x\n"+
-			"Payload: %s\n",
-		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
 }
 
 type XbeeFrame struct {
