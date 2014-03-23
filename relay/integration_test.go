@@ -6,7 +6,7 @@ import (
 
 func TestSimple(t *testing.T) {
 	fakeSerial := NewSerialPair(0)
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	
 	relay, err := MakeRelay(fakeSerial, reports)
 	AssertNoError(err, t)

@@ -258,7 +258,7 @@ func TestTransmitPacket(t *testing.T) {
 
 // ===============
 
-func ReportsEq(expected, actual *ReportMetricsByNameRequest, t *testing.T) {
+func ReportsEq(expected, actual *ReportMetricsArg, t *testing.T) {
 	if expected.sender != actual.sender {
 		t.Errorf("ReportMetricsByNameMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
 	}
@@ -277,7 +277,7 @@ func ReportsEq(expected, actual *ReportMetricsByNameRequest, t *testing.T) {
 
 func TestMetricReport(t *testing.T) {
 	packets := NewPacketPair(0)
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	relay, err := NewRelay(packets, reports)
 	AssertNoError(err, t)
 
@@ -301,7 +301,7 @@ func TestMetricReport(t *testing.T) {
 	report := <-reports
 
 	ReportsEq(
-		&ReportMetricsByNameRequest{
+		&ReportMetricsArg{
 			sender:  0x2222,
 			metrics: map[string]int64{"FOO": 1, "bar": 2},
 		}, report, t)
@@ -311,7 +311,7 @@ func TestMetricReport(t *testing.T) {
 
 func TestMalformedMetricReport(t *testing.T) {
 	packets := NewPacketPair(0)
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	relay, err := NewRelay(packets, reports)
 	AssertNoError(err, t)
 
@@ -335,7 +335,7 @@ func TestMalformedMetricReport(t *testing.T) {
 
 func TestUnsupportedProtocolVersion(t *testing.T) {
 	packets := NewPacketPair(0)
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	relay, err := NewRelay(packets, reports)
 	AssertNoError(err, t)
 
@@ -359,7 +359,7 @@ func TestUnsupportedProtocolVersion(t *testing.T) {
 
 func TestUnknownMethod(t *testing.T) {
 	packets := NewPacketPair(0)
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	relay, err := NewRelay(packets, reports)
 	AssertNoError(err, t)
 
@@ -383,7 +383,7 @@ func TestUnknownMethod(t *testing.T) {
 
 func TestReadMessageAfterError(t *testing.T) {
 	packets := NewPacketPair(0)
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	relay, err := NewRelay(packets, reports)
 	AssertNoError(err, t)
 
@@ -411,7 +411,7 @@ func TestReadMessageAfterError(t *testing.T) {
 	actual := <-reports
 
 	ReportsEq(
-		&ReportMetricsByNameRequest{
+		&ReportMetricsArg{
 			sender:  0x2222,
 			metrics: map[string]int64{"FOO": 11},
 		}, actual, t)

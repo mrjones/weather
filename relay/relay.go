@@ -12,12 +12,12 @@ const (
 )
 
 
-type ReportMetricsByNameRequest struct {
+type ReportMetricsArg struct {
 	sender  uint16
 	metrics map[string]int64 // map from name to value
 }
 
-func (m *ReportMetricsByNameRequest) DebugString() string {
+func (m *ReportMetricsArg) DebugString() string {
 	vals := ""
 	sep := ""
 	for k, v := range m.metrics {
@@ -148,7 +148,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	log.Printf("method: %d\n", method)
 
 	if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
-		report := &ReportMetricsByNameRequest{sender: sender}
+		report := &ReportMetricsArg{sender: sender}
 		err, i, numMetrics := decodeVarUint(data, i)
 		if err != nil {
 			fmt.Println(err)
@@ -198,11 +198,11 @@ type Relay struct {
 	packets *PacketPair
 	metricIds map[string]uint
 	nextId uint
-	reports chan<- *ReportMetricsByNameRequest
+	reports chan<- *ReportMetricsArg
 	shutdown bool
 }
 
-func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsByNameRequest) (*Relay, error) {
+func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg) (*Relay, error) {
 	r := &Relay{
 		packets: packets,
 		metricIds: make(map[string]uint),
@@ -248,7 +248,7 @@ func NewSerialPair(n int) *SerialPair {
 	}
 }
 
-func MakeRelay(serial *SerialPair, reports chan *ReportMetricsByNameRequest) (*Relay, error) {
+func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg) (*Relay, error) {
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
 	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
@@ -257,7 +257,7 @@ func MakeRelay(serial *SerialPair, reports chan *ReportMetricsByNameRequest) (*R
 	return NewRelay(xbee.IO(), reports)
 }
 
-func drainReports(reports <-chan *ReportMetricsByNameRequest) {
+func drainReports(reports <-chan *ReportMetricsArg) {
 	for {
 		report := <- reports
 		log.Println(report.DebugString())
@@ -270,7 +270,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	reports := make(chan *ReportMetricsByNameRequest)
+	reports := make(chan *ReportMetricsArg)
 	go drainReports(reports)
 	relay, err := MakeRelay(serial.Pair(), reports)
 	if err != nil {
