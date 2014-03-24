@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -416,4 +417,25 @@ func TestReadMessageAfterError(t *testing.T) {
 		}, actual, t)
 
 	relay.Shutdown()
+}
+
+// ===============
+
+func TestParseAndSerializeRpcArgs(t *testing.T) {
+	original := &ReportMetricsArg{
+//		sender:  0x2222,
+		metrics: map[string]int64{
+			"foo": 255,
+			"bar": 256,
+		},
+	}
+
+	encoded, err := original.Serialize()
+	AssertNoError(err, t)
+
+	fmt.Printf("ENCODED: %s\n", arrayAsHex(encoded))
+
+	result, err := ParseReportMetricsArg(encoded, 0)
+	AssertNoError(err, t)
+	ReportsEq(original, result, t)
 }

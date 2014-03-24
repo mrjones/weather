@@ -30,8 +30,57 @@ func (m *ReportMetricsArg) DebugString() string {
 }
 
 func (m *ReportMetricsArg) Serialize() ([]byte, error) {
-	// TODO: implement and use in integration test
-	return nil, fmt.Errorf("Unimplemented")
+	i := uint(0)
+	buf := make([]byte, 1024)
+	var err error
+
+	err, i = encodeVarUint(&buf, i, uint(len(m.metrics)))
+	if err != nil {
+		return []byte{}, err
+	}
+
+	for id, val := range(m.metrics) {
+		err, i = encodeString(&buf, i, id)
+		if err != nil {
+			return []byte{}, err
+		}
+
+		err, i = encodeVarUint(&buf, i, uint(val))
+		if err != nil {
+			return []byte{}, err
+		}
+	}
+
+	return buf[:i], nil
+}
+
+func ParseReportMetricsArg(data []byte, offset uint) (*ReportMetricsArg, error) {
+	report := &ReportMetricsArg{}
+	err, i, numMetrics := decodeVarUint(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("num metrics: %d\n", numMetrics)
+	report.metrics = make(map[string]int64)
+
+	for m := uint64(0); m < numMetrics; m++ {
+		name := ""
+		val := uint64(0)
+		err, i, name = decodeString(data, i)
+		if err != nil {
+			return nil, err
+		}
+
+		err, i, val = decodeVarUint(data, i)
+		if err != nil {
+			return nil, err
+		}
+
+		report.metrics[name] = int64(val)
+		log.Printf("metric[%s]: %d\n", name, report.metrics[name])
+	}
+
+	return report, nil
 }
 
 func arrayAsHex(a []byte) string {
@@ -68,6 +117,19 @@ func encodeString(data *[]byte, offset uint, s string) (e error, pos uint) {
 }
 
 func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
+	width := 0
+	n2 := n
+	for n2 > 0 {
+		width++
+		n2 = n2 >> 8
+	}
+
+	if width > 0xFF {
+		return fmt.Errorf("Number too wide: %d", n), offset
+	}
+	(*data)[offset] = byte(width)
+	offset++
+
 	for n > 0 {
 		if offset >= uint(len(*data)) {
 			return fmt.Errorf("Buffer overrun (encoding varint %d) %d vs. %d.", n, offset, len(*data)), offset
@@ -152,35 +214,13 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	log.Printf("method: %d\n", method)
 
 	if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
-		report := &ReportMetricsArg{sender: sender}
-		err, i, numMetrics := decodeVarUint(data, i)
+		report, err := ParseReportMetricsArg(data, i)
 		if err != nil {
-			fmt.Println(err)
-			return
+			log.Println(err)
+		} else {
+			report.sender = sender
+			r.reports <- report
 		}
-		log.Printf("num metrics: %d\n", numMetrics)
-		report.metrics = make(map[string]int64)
-
-		for m := uint64(0); m < numMetrics; m++ {
-			name := ""
-			val := uint64(0)
-			err, i, name = decodeString(data, i)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			err, i, val = decodeVarUint(data, i)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-
-			report.metrics[name] = int64(val)
-			log.Printf("metric[%s]: %d\n", name, report.metrics[name])
-		}
-		r.reports <- report
-
 	} else {
 		fmt.Println(fmt.Errorf("Unknown method %d", method))
 	}
