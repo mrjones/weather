@@ -192,7 +192,7 @@ type Relay struct {
 func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg) (*Relay, error) {
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
-	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
+	_ = NewRawXbeeDevice(serial, framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice)
 
 	return NewRelay(xbee.IO(), reports)
@@ -227,18 +227,6 @@ func (r *Relay) loop() {
 			return
 		}
 		r.processPacket(packet)
-	}
-}
-
-type SerialPair struct {
-	FromDevice chan []byte
-	ToDevice   chan []byte
-}
-
-func NewSerialPair(n int) *SerialPair {
-	return &SerialPair{
-		FromDevice: make(chan []byte, n),
-		ToDevice:   make(chan []byte, n),
 	}
 }
 

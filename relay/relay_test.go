@@ -47,7 +47,7 @@ func AssertNoError(err error, t *testing.T) {
 func TestConsumeMessageAllAtOnce(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial, frames.FromDevice, frames.ToDevice)
 
 	serial.FromDevice <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 
@@ -65,7 +65,7 @@ func TestConsumeMessageAllAtOnce(t *testing.T) {
 func TestConsumeMessageByteByByte(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial, frames.FromDevice, frames.ToDevice)
 	serial.FromDevice <- []byte{0x7e}
 	serial.FromDevice <- []byte{0x00}
 	serial.FromDevice <- []byte{0x03}
@@ -88,7 +88,7 @@ func TestConsumeMessageByteByByte(t *testing.T) {
 func TestConsumeTwoMessages(t *testing.T) {
 	serial := NewSerialPair(1)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial, frames.FromDevice, frames.ToDevice)
 
 	serial.FromDevice <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
 	serial.FromDevice <- []byte{0x7e, 0x00, 0x04, 0x12, 0x34, 0x56, 0x78, 0xEB}
@@ -116,7 +116,7 @@ func TestConsumeTwoMessages(t *testing.T) {
 func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial, frames.FromDevice, frames.ToDevice)
 
 	serial.FromDevice <- []byte{0x7e, 0x00, 0x01, 0x99, 0x00}
 	serial.FromDevice <- []byte{0x7e, 0x00, 0x03, 0x12, 0x34, 0x56, 0x63}
@@ -135,7 +135,7 @@ func TestDropsBadChecksumMessageAndKeepsGoing(t *testing.T) {
 func TestToDevicesFrames(t *testing.T) {
 	serial := NewSerialPair(0)
 	frames := NewFramePair(0)
-	device := NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, frames.FromDevice, frames.ToDevice)
+	device := NewRawXbeeDevice(serial, frames.FromDevice, frames.ToDevice)
 
 	frames.ToDevice <- &XbeeFrame{
 		length:   3,

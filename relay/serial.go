@@ -7,6 +7,18 @@ import (
 	"unsafe"
 )
 
+type SerialPair struct {
+	FromDevice chan []byte
+	ToDevice   chan []byte
+}
+
+func NewSerialPair(n int) *SerialPair {
+	return &SerialPair{
+		FromDevice: make(chan []byte, n),
+		ToDevice:   make(chan []byte, n),
+	}
+}
+
 type SerialChannel struct {
 	underlyingFile *os.File
 	readChannel    chan []byte

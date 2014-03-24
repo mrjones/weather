@@ -196,17 +196,15 @@ type RawXbeeDevice struct {
 	state                int
 	bytesConsumedInState uint16
 
-	serialFromDevice <-chan []byte
-	serialToDevice   chan<- []byte
+	serial *SerialPair
 	currentFrame     *XbeeFrame
 	framesFromDevice chan<- *XbeeFrame
 	framesToDevice   <-chan *XbeeFrame
 }
 
-func NewRawXbeeDevice(serialFromDevice <-chan []byte, serialToDevice chan<- []byte, framesFromDevice chan<- *XbeeFrame, framesToDevice <-chan *XbeeFrame) *RawXbeeDevice {
+func NewRawXbeeDevice(serialPair *SerialPair, framesFromDevice chan<- *XbeeFrame, framesToDevice <-chan *XbeeFrame) *RawXbeeDevice {
 	a := &RawXbeeDevice{
-		serialFromDevice: serialFromDevice,
-		serialToDevice:   serialToDevice,
+		serial: serialPair,
 		framesFromDevice: framesFromDevice,
 		framesToDevice:   framesToDevice,
 	}
@@ -222,7 +220,7 @@ func (x *RawXbeeDevice) Shutdown() {
 func (a *RawXbeeDevice) serialIoLoop() {
 	for {
 		select {
-		case buf := <-a.serialFromDevice:
+		case buf := <-a.serial.FromDevice:
 			a.consume(buf, 0, len(buf))
 		case frame := <-a.framesToDevice:
 			if len(frame.payload) != int(frame.length) {
@@ -237,7 +235,7 @@ func (a *RawXbeeDevice) serialIoLoop() {
 				payload[3+i] = frame.payload[i]
 			}
 			payload[len(payload)-1] = frame.checksum
-			a.serialToDevice <- payload
+			a.serial.ToDevice <- payload
 		}
 	}
 }
