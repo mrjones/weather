@@ -86,6 +86,43 @@ func (d *RxPacket) DebugString() string {
 		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
 }
 
+func (p *RxPacket) Serialize() (*[]byte, error) {
+	plen := len(p.payload)
+
+	data := make([]byte, plen + 5)
+	data[0] = RX_PACKET_16BIT
+	data[1] = byte((p.sender >> 8) & 0xFF)
+	data[2] = byte(p.sender & 0xFF)
+	data[3] = byte(p.rssi)
+	data[4] = p.options
+	for i := 0; i < plen; i++ {
+		data[5 + i] = p.payload[i]
+	}
+
+	return &data, nil
+}
+
+func ParseRxPacket(data []byte) (*RxPacket, error) {
+	if len(data) < 5 {
+		return nil, fmt.Errorf("Malformed packet (too short, length = %d).", len(data))
+	}
+	senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
+	payloadLength := len(data) - 5
+	var payload = make([]byte, payloadLength)
+	for i := 0; i < payloadLength; i++ {
+		payload[i] = data[i+5]
+	}
+
+	packet := &RxPacket{
+		payload: payload,
+		sender:  senderAddr,
+		rssi:    uint8(data[3]),
+		options: data[4],
+	}
+	log.Printf("%s", packet.DebugString())
+	return packet, nil
+}
+
 func (x *XbeeConnection) processIncomingFrames() {
 	for {
 		select {
@@ -135,25 +172,12 @@ func (x *XbeeConnection) processOutgoingPacket(packet *TxPacket) {
 func (x *XbeeConnection) processIncomingFrame(frame *XbeeFrame) {
 	data := frame.payload
 	if data[0] == RX_PACKET_16BIT {
-		if len(data) < 5 {
-			log.Printf("Malformed packet (too short, length = %d).", len(data))
-			return
+		packet, err := ParseRxPacket(data)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			x.rxData <- packet
 		}
-		senderAddr := (uint16(data[1]) << 8) + uint16(data[2])
-		payloadLength := len(data) - 5
-		var payload = make([]byte, payloadLength)
-		for i := 0; i < payloadLength; i++ {
-			payload[i] = data[i+5]
-		}
-
-		packet := &RxPacket{
-			payload: payload,
-			sender:  senderAddr,
-			rssi:    uint8(data[3]),
-			options: data[4],
-		}
-		log.Printf("%s", packet.DebugString())
-		x.rxData <- packet
 	} else {
 		fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
 	}

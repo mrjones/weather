@@ -29,6 +29,11 @@ func (m *ReportMetricsArg) DebugString() string {
 		m.sender, vals)
 }
 
+func (m *ReportMetricsArg) Serialize() ([]byte, error) {
+	// TODO: implement and use in integration test
+	return nil, fmt.Errorf("Unimplemented")
+}
+
 func arrayAsHex(a []byte) string {
 	return arrayAsHexWithLen(a, len(a))
 }
