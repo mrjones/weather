@@ -17,7 +17,7 @@ func makeFrame(payload []byte) *XbeeFrame {
 	}
 }
 
-func TestSimple(t *testing.T) {
+func TestOneMessage(t *testing.T) {
 	fakeSerial := NewSerialPair(10)
 	reports := make(chan *ReportMetricsArg)
 
@@ -34,10 +34,12 @@ func TestSimple(t *testing.T) {
 		0x01, 0x01, // API Version
 		0x01, 0x03, // RPC Method ID
 		0x01, 0x02, // Num Metrics
-		0x01, 0x03, 'F', 'O', 'O', // metric[0] name
-		0x01, 0xFF, // metric[0] value
-		0x01, 0x03, 'b', 'a', 'r', // metric[1] name
-		0x02, 0x00, 0x01 }  // metric[0] value
+		0x01, 0x03, // len(metric[0].name)
+		'F', 'O', 'O', // metric[0].name
+		0x01, 0xFF, // metric[0].value
+		0x01, 0x03, // len(metric[1].name)
+		'b', 'a', 'r', // metric[1] name
+		0x02, 0x00, 0x01 }  // metric[1].value
 	fakeSerial.FromDevice <- makeFrame(payload).Serialize()
 
 	report := <- reports
