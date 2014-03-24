@@ -86,7 +86,7 @@ func (d *RxPacket) DebugString() string {
 		d.rssi, d.sender, d.options, arrayAsHex(d.payload))
 }
 
-func (p *RxPacket) Serialize() (*[]byte, error) {
+func (p *RxPacket) Serialize() []byte {
 	plen := len(p.payload)
 
 	data := make([]byte, plen + 5)
@@ -99,7 +99,7 @@ func (p *RxPacket) Serialize() (*[]byte, error) {
 		data[5 + i] = p.payload[i]
 	}
 
-	return &data, nil
+	return data
 }
 
 func ParseRxPacket(data []byte) (*RxPacket, error) {

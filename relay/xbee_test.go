@@ -12,10 +12,7 @@ func TestEncodeDecordRxPacket(t *testing.T) {
 		options: 0x44,
 	}
 
-	encoded, err := original.Serialize()
-	AssertNoError(err, t)
-
-	result, err := ParseRxPacket(*encoded)
+	result, err := ParseRxPacket(original.Serialize())
 	AssertNoError(err, t)
 
 	PacketsEq(original, result, t)

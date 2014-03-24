@@ -17,7 +17,7 @@ func makeFrame(payload []byte) *XbeeFrame {
 	}
 }
 
-func TestOneMessage(t *testing.T) {
+func TestReceiveOneMessage(t *testing.T) {
 	fakeSerial := NewSerialPair(10)
 	reports := make(chan *ReportMetricsArg)
 
@@ -25,22 +25,24 @@ func TestOneMessage(t *testing.T) {
 	AssertNoError(err, t)
 	relay.Start() // Necessary?
 
-	payload := []byte {
-		0x81, // API Identifier
-		0x22, 0x22, // Sender
-		0x38, // RSSI
-		0x00, // Options
-		// -- PAYLOAD --
-		0x01, 0x01, // API Version
-		0x01, 0x03, // RPC Method ID
-		0x01, 0x02, // Num Metrics
-		0x01, 0x03, // len(metric[0].name)
-		'F', 'O', 'O', // metric[0].name
-		0x01, 0xFF, // metric[0].value
-		0x01, 0x03, // len(metric[1].name)
-		'b', 'a', 'r', // metric[1] name
-		0x02, 0x00, 0x01 }  // metric[1].value
-	fakeSerial.FromDevice <- makeFrame(payload).Serialize()
+	rxPacket := &RxPacket{
+		sender: 0x2222,
+		rssi: 0x38,
+		options: 0x0,
+		payload: []byte {
+			0x01, 0x01, // API Version
+			0x01, 0x03, // RPC Method ID
+			0x01, 0x02, // Num Metrics
+			0x01, 0x03, // len(metric[0].name)
+			'F', 'O', 'O', // metric[0].name
+			0x01, 0xFF, // metric[0].value
+			0x01, 0x03, // len(metric[1].name)
+			'b', 'a', 'r', // metric[1] name
+			0x02, 0x00, 0x01,  // metric[1].value
+		},
+	}
+
+	fakeSerial.FromDevice <- makeFrame(rxPacket.Serialize()).Serialize()
 
 	report := <- reports
 
