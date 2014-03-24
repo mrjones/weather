@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"testing"
 )
 
@@ -25,21 +26,27 @@ func TestReceiveOneMessage(t *testing.T) {
 	AssertNoError(err, t)
 	relay.Start() // Necessary?
 
+	reportArg := ReportMetricsArg{
+		metrics: map[string]int64 {
+			"FOO":255,
+			"bar":256,
+		},
+	}
+	reportArgBytes, err := reportArg.Serialize()
+	AssertNoError(err, t)
+
+	appPayload := &bytes.Buffer{}
+	appPayload.Write([]byte {
+		0x01, 0x01, // API Version
+		0x01, 0x03, // RPC Method ID
+	})
+	appPayload.Write(reportArgBytes)
+
 	rxPacket := &RxPacket{
 		sender: 0x2222,
 		rssi: 0x38,
 		options: 0x0,
-		payload: []byte {
-			0x01, 0x01, // API Version
-			0x01, 0x03, // RPC Method ID
-			0x01, 0x02, // Num Metrics
-			0x01, 0x03, // len(metric[0].name)
-			'F', 'O', 'O', // metric[0].name
-			0x01, 0xFF, // metric[0].value
-			0x01, 0x03, // len(metric[1].name)
-			'b', 'a', 'r', // metric[1] name
-			0x02, 0x00, 0x01,  // metric[1].value
-		},
+		payload: appPayload.Bytes(),
 	}
 
 	fakeSerial.FromDevice <- makeFrame(rxPacket.Serialize()).Serialize()
