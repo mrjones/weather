@@ -305,7 +305,7 @@ func (a *RawXbeeDevice) verifyChecksum(data []byte, offset int, len int) (int, e
 		a.framesFromDevice <- a.currentFrame
 		a.reset()
 	} else {
-		fmt.Printf("Invalid checksum! Dropping frame 0x%x\n", v)
+		fmt.Printf("Invalid checksum (0x%x)! Dropping frame.\n", v)
 		a.reset()
 		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
 	}
