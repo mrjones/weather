@@ -108,7 +108,6 @@ func (x *XbeeConnection) processIncomingFrames() {
 }
 
 func (x *XbeeConnection) processOutgoingPacket(packet *TxPacket) {
-
 	payload := make([]byte, len(packet.payload)+5)
 	payload[0] = 0x01
 	payload[1] = 0x00
@@ -224,7 +223,7 @@ func (a *RawXbeeDevice) serialIoLoop() {
 	for {
 		select {
 		case buf := <-a.serialFromDevice:
-			a.Consume(buf, 0, len(buf))
+			a.consume(buf, 0, len(buf))
 		case frame := <-a.framesToDevice:
 			if len(frame.payload) != int(frame.length) {
 				fmt.Printf("Malformed length field")
@@ -243,26 +242,7 @@ func (a *RawXbeeDevice) serialIoLoop() {
 	}
 }
 
-/*
-func (a *RawXbeeDevice) serialIoLoop() {
-	buf := make([]byte, 128)
-
-	for {
-		n, err := a.serial.Read(buf)
-		log.Printf("Read %d bytes\n", n)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		err = a.Consume(buf, 0, n)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-}
-*/
-
-func (a *RawXbeeDevice) Consume(data []byte, offset int, length int) error {
+func (a *RawXbeeDevice) consume(data []byte, offset int, length int) error {
 	if offset+length > len(data) {
 		return fmt.Errorf("Can't consume bytes [%d,%d). Array length is %d.",
 			offset, offset+length, len(data))

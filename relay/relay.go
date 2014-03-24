@@ -189,6 +189,15 @@ type Relay struct {
 	shutdown  bool
 }
 
+func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg) (*Relay, error) {
+	framesFromDevice := make(chan *XbeeFrame)
+	framesToDevice := make(chan *XbeeFrame)
+	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
+	xbee := NewXbeeConnection(framesFromDevice, framesToDevice)
+
+	return NewRelay(xbee.IO(), reports)
+}
+
 func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg) (*Relay, error) {
 	r := &Relay{
 		packets:   packets,
@@ -198,6 +207,15 @@ func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg) (*Relay, er
 	}
 	go r.loop()
 	return r, nil
+}
+
+func (r *Relay) Start() { }
+
+func (r *Relay) Shutdown() {
+	if !r.shutdown {
+		close(r.reports) // need a mutex here?
+		r.shutdown = true
+	}
 }
 
 func (r *Relay) loop() {
@@ -212,15 +230,6 @@ func (r *Relay) loop() {
 	}
 }
 
-func (r *Relay) Start() { }
-
-func (r *Relay) Shutdown() {
-	if !r.shutdown {
-		close(r.reports) // need a mutex here?
-		r.shutdown = true
-	}
-}
-
 type SerialPair struct {
 	FromDevice chan []byte
 	ToDevice   chan []byte
@@ -231,15 +240,6 @@ func NewSerialPair(n int) *SerialPair {
 		FromDevice: make(chan []byte, n),
 		ToDevice:   make(chan []byte, n),
 	}
-}
-
-func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg) (*Relay, error) {
-	framesFromDevice := make(chan *XbeeFrame)
-	framesToDevice := make(chan *XbeeFrame)
-	_ = NewRawXbeeDevice(serial.FromDevice, serial.ToDevice, framesFromDevice, framesToDevice)
-	xbee := NewXbeeConnection(framesFromDevice, framesToDevice)
-
-	return NewRelay(xbee.IO(), reports)
 }
 
 func drainReports(reports <-chan *ReportMetricsArg) {
