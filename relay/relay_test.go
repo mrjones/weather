@@ -303,8 +303,8 @@ func TestMetricReport(t *testing.T) {
 
 	ReportsEq(
 		&ReportMetricsArg{
-			reporterId:  0x2222,
-			metrics: map[string]int64{"FOO": 1, "bar": 2},
+			reporterId: 0x2222,
+			metrics:    map[string]int64{"FOO": 1, "bar": 2},
 		}, report, t)
 
 	relay.Shutdown()
@@ -414,8 +414,8 @@ func TestReadMessageAfterError(t *testing.T) {
 
 	ReportsEq(
 		&ReportMetricsArg{
-			reporterId:  0x2222,
-			metrics: map[string]int64{"FOO": 11},
+			reporterId: 0x2222,
+			metrics:    map[string]int64{"FOO": 11},
 		}, actual, t)
 
 	relay.Shutdown()
@@ -425,7 +425,7 @@ func TestReadMessageAfterError(t *testing.T) {
 
 func TestParseAndSerializeRpcArgs(t *testing.T) {
 	original := &ReportMetricsArg{
-		reporterId:  0xFFFF,
+		reporterId: 0xFFFF,
 		metrics: map[string]int64{
 			"foo": 255,
 			"bar": 256,

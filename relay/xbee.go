@@ -89,14 +89,14 @@ func (d *RxPacket) DebugString() string {
 func (p *RxPacket) Serialize() []byte {
 	plen := len(p.payload)
 
-	data := make([]byte, plen + 5)
+	data := make([]byte, plen+5)
 	data[0] = RX_PACKET_16BIT
 	data[1] = byte((p.sender >> 8) & 0xFF)
 	data[2] = byte(p.sender & 0xFF)
 	data[3] = byte(p.rssi)
 	data[4] = p.options
 	for i := 0; i < plen; i++ {
-		data[5 + i] = p.payload[i]
+		data[5+i] = p.payload[i]
 	}
 
 	return data
@@ -220,7 +220,7 @@ type RawXbeeDevice struct {
 	state                int
 	bytesConsumedInState uint16
 
-	serial *SerialPair
+	serial           *SerialPair
 	currentFrame     *XbeeFrame
 	framesFromDevice chan<- *XbeeFrame
 	framesToDevice   <-chan *XbeeFrame
@@ -228,7 +228,7 @@ type RawXbeeDevice struct {
 
 func NewRawXbeeDevice(serialPair *SerialPair, framesFromDevice chan<- *XbeeFrame, framesToDevice <-chan *XbeeFrame) *RawXbeeDevice {
 	a := &RawXbeeDevice{
-		serial: serialPair,
+		serial:           serialPair,
 		framesFromDevice: framesFromDevice,
 		framesToDevice:   framesToDevice,
 	}

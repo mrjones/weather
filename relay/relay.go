@@ -13,7 +13,7 @@ const (
 
 type ReportMetricsArg struct {
 	reporterId uint64
-	metrics map[string]int64 // map from name to value
+	metrics    map[string]int64 // map from name to value
 }
 
 func (m *ReportMetricsArg) DebugString() string {
@@ -44,7 +44,7 @@ func (m *ReportMetricsArg) Serialize() ([]byte, error) {
 		return []byte{}, err
 	}
 
-	for id, val := range(m.metrics) {
+	for id, val := range m.metrics {
 		err, i = encodeString(&buf, i, id)
 		if err != nil {
 			return []byte{}, err
@@ -267,7 +267,7 @@ func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg) (*Relay, er
 	return r, nil
 }
 
-func (r *Relay) Start() { }
+func (r *Relay) Start() {}
 
 func (r *Relay) Shutdown() {
 	if !r.shutdown {
