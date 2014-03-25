@@ -18,29 +18,18 @@ func makeFrame(payload []byte) *XbeeFrame {
 	}
 }
 
-func TestReceiveOneMessage(t *testing.T) {
-	fakeSerial := NewSerialPair(10)
-	reports := make(chan *ReportMetricsArg)
-
-	relay, err := MakeRelay(fakeSerial, reports)
-	AssertNoError(err, t)
-	relay.Start() // Necessary?
-
-	reportArg := ReportMetricsArg{
-		metrics: map[string]int64 {
-			"FOO":255,
-			"bar":256,
-		},
+func encode(arg ReportMetricsArg) ([]byte, error) {
+	buf, err := arg.Serialize()
+	if err != nil {
+		return []byte{}, err
 	}
-	reportArgBytes, err := reportArg.Serialize()
-	AssertNoError(err, t)
 
 	appPayload := &bytes.Buffer{}
 	appPayload.Write([]byte {
 		0x01, 0x01, // API Version
 		0x01, 0x03, // RPC Method ID
 	})
-	appPayload.Write(reportArgBytes)
+	appPayload.Write(buf)
 
 	rxPacket := &RxPacket{
 		sender: 0x2222,
@@ -49,13 +38,32 @@ func TestReceiveOneMessage(t *testing.T) {
 		payload: appPayload.Bytes(),
 	}
 
-	fakeSerial.FromDevice <- makeFrame(rxPacket.Serialize()).Serialize()
+	return makeFrame(rxPacket.Serialize()).Serialize(), nil
+}
+
+func TestReceiveOneMessage(t *testing.T) {
+	fakeSerial := NewSerialPair(10)
+	reports := make(chan *ReportMetricsArg)
+
+	relay, err := MakeRelay(fakeSerial, reports)
+	AssertNoError(err, t)
+	relay.Start() // Necessary?
+
+	buf, err := encode(ReportMetricsArg{
+		reporterId: 123456,
+		metrics: map[string]int64 {
+			"FOO":255,
+			"bar":256,
+		},
+	})
+	AssertNoError(err, t)
+	fakeSerial.FromDevice <- buf
 
 	report := <- reports
 
 	ReportsEq(
 		&ReportMetricsArg{
-			sender: 0x2222,
+			reporterId: 123456,
 			metrics: map[string]int64{"FOO": 255, "bar": 256},
 		}, report, t);
 

@@ -259,8 +259,8 @@ func TestTransmitPacket(t *testing.T) {
 // ===============
 
 func ReportsEq(expected, actual *ReportMetricsArg, t *testing.T) {
-	if expected.sender != actual.sender {
-		t.Errorf("ReportMetricsByNameMessages don't match in 'sender' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.sender, actual.sender)
+	if expected.reporterId != actual.reporterId {
+		t.Errorf("ReportMetricsByNameMessages don't match in 'reporterId' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.reporterId, actual.reporterId)
 	}
 
 	if len(expected.metrics) != len(actual.metrics) {
@@ -285,6 +285,7 @@ func TestMetricReport(t *testing.T) {
 		payload: []byte{
 			0x1, 0x1, // Protocol Version
 			0x1, 0x3, // Method ID
+			0x2, 0x22, 0x22, // ReporterID
 			0x1, 0x2, // Num metrics
 			0x1, 0x3, // metric[0] name length
 			'F', 'O', 'O', // metric[0] name
@@ -302,7 +303,7 @@ func TestMetricReport(t *testing.T) {
 
 	ReportsEq(
 		&ReportMetricsArg{
-			sender:  0x2222,
+			reporterId:  0x2222,
 			metrics: map[string]int64{"FOO": 1, "bar": 2},
 		}, report, t)
 
@@ -398,6 +399,7 @@ func TestReadMessageAfterError(t *testing.T) {
 		payload: []byte{
 			0x1, 0x1, // Protocol Version
 			0x1, 0x3, // Method ID
+			0x2, 0x22, 0x22, // ReporterID
 			0x1, 0x1, // Num metrics
 			0x1, 0x3, // metric[0] name length
 			'F', 'O', 'O', // metric[0] name
@@ -412,7 +414,7 @@ func TestReadMessageAfterError(t *testing.T) {
 
 	ReportsEq(
 		&ReportMetricsArg{
-			sender:  0x2222,
+			reporterId:  0x2222,
 			metrics: map[string]int64{"FOO": 11},
 		}, actual, t)
 
@@ -423,7 +425,7 @@ func TestReadMessageAfterError(t *testing.T) {
 
 func TestParseAndSerializeRpcArgs(t *testing.T) {
 	original := &ReportMetricsArg{
-//		sender:  0x2222,
+		reporterId:  0xFFFF,
 		metrics: map[string]int64{
 			"foo": 255,
 			"bar": 256,

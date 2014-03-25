@@ -12,7 +12,7 @@ const (
 )
 
 type ReportMetricsArg struct {
-	sender  uint16
+	reporterId uint64
 	metrics map[string]int64 // map from name to value
 }
 
@@ -24,17 +24,22 @@ func (m *ReportMetricsArg) DebugString() string {
 		sep = ", "
 	}
 	return fmt.Sprintf(
-		"Sender:  0x%x\n"+
+		"ReporterID:  0x%x\n"+
 			"Metrics: %s\n",
-		m.sender, vals)
+		m.reporterId, vals)
 }
 
 func (m *ReportMetricsArg) Serialize() ([]byte, error) {
-	i := uint(0)
+	i := uint64(0)
 	buf := make([]byte, 1024)
 	var err error
 
-	err, i = encodeVarUint(&buf, i, uint(len(m.metrics)))
+	err, i = encodeVarUint(&buf, i, m.reporterId)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	err, i = encodeVarUint(&buf, i, uint64(len(m.metrics)))
 	if err != nil {
 		return []byte{}, err
 	}
@@ -45,7 +50,7 @@ func (m *ReportMetricsArg) Serialize() ([]byte, error) {
 			return []byte{}, err
 		}
 
-		err, i = encodeVarUint(&buf, i, uint(val))
+		err, i = encodeVarUint(&buf, i, uint64(val))
 		if err != nil {
 			return []byte{}, err
 		}
@@ -54,9 +59,18 @@ func (m *ReportMetricsArg) Serialize() ([]byte, error) {
 	return buf[:i], nil
 }
 
-func ParseReportMetricsArg(data []byte, offset uint) (*ReportMetricsArg, error) {
+func ParseReportMetricsArg(data []byte, offset uint64) (*ReportMetricsArg, error) {
 	report := &ReportMetricsArg{}
-	err, i, numMetrics := decodeVarUint(data, offset)
+	numMetrics := uint64(0)
+
+	err, i, reporterId := decodeVarUint(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	report.reporterId = reporterId
+	log.Printf("reporterId: %d\n", report.reporterId)
+
+	err, i, numMetrics = decodeVarUint(data, i)
 	if err != nil {
 		return nil, err
 	}
@@ -96,19 +110,19 @@ func arrayAsHexWithLen(a []byte, length int) string {
 	return s
 }
 
-func encodeString(data *[]byte, offset uint, s string) (e error, pos uint) {
-	length := uint(len(s))
+func encodeString(data *[]byte, offset uint64, s string) (e error, pos uint64) {
+	length := uint64(len(s))
 	err, offset := encodeVarUint(data, offset, length)
 	if err != nil {
 		return err, offset
 	}
 
-	if offset+length > uint(len(*data)) {
+	if offset+length > uint64(len(*data)) {
 		return fmt.Errorf("Buffer overrun (encoding string %s) %d vs. %d.", s, offset, len(*data)), offset
 
 	}
 
-	for i := uint(0); i < length; i++ {
+	for i := uint64(0); i < length; i++ {
 		(*data)[offset] = s[i]
 		offset++
 	}
@@ -116,7 +130,7 @@ func encodeString(data *[]byte, offset uint, s string) (e error, pos uint) {
 	return nil, offset
 }
 
-func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
+func encodeVarUint(data *[]byte, offset uint64, n uint64) (e error, pos uint64) {
 	width := 0
 	n2 := n
 	for n2 > 0 {
@@ -131,7 +145,7 @@ func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
 	offset++
 
 	for n > 0 {
-		if offset >= uint(len(*data)) {
+		if offset >= uint64(len(*data)) {
 			return fmt.Errorf("Buffer overrun (encoding varint %d) %d vs. %d.", n, offset, len(*data)), offset
 		}
 		(*data)[offset] = byte(n & 0xFF)
@@ -141,8 +155,8 @@ func encodeVarUint(data *[]byte, offset uint, n uint) (e error, pos uint) {
 	return nil, offset
 }
 
-func decodeString(data []byte, offset uint) (e error, pos uint, s string) {
-	if offset >= uint(len(data)) {
+func decodeString(data []byte, offset uint64) (e error, pos uint64, s string) {
+	if offset >= uint64(len(data)) {
 		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), offset, ""
 	}
 
@@ -167,19 +181,19 @@ func decodeString(data []byte, offset uint) (e error, pos uint, s string) {
 	return nil, offset, string(chars)
 }
 
-func decodeVarUint(data []byte, offset uint) (e error, pos uint, val uint64) {
-	if offset >= uint(len(data)) {
+func decodeVarUint(data []byte, offset uint64) (e error, pos uint64, val uint64) {
+	if offset >= uint64(len(data)) {
 		return fmt.Errorf("Index out of bounds %d vs %d.", offset, len(data)), 0, 0
 	}
 
-	width := uint(data[offset])
+	width := uint64(data[offset])
 
-	if offset+1+width > uint(len(data)) {
+	if offset+1+width > uint64(len(data)) {
 		return fmt.Errorf("Can't parse value of width %d startting at %d. Length is only %d.", width, offset+1, len(data)), 0, 0
 	}
 
 	val = 0
-	for i := uint(0); i < width; i++ {
+	for i := uint64(0); i < width; i++ {
 		val += uint64(data[offset+i+1]) << (8 * i)
 	}
 
@@ -192,7 +206,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 
 	log.Printf("Payload: %s\n", arrayAsHex(data))
 	log.Printf("Sender:  0x%x\n", sender)
-	i := uint(0)
+	i := uint64(0)
 
 	err, i, protocolVersion := decodeVarUint(data, i)
 	if err != nil {
@@ -218,7 +232,6 @@ func (r *Relay) processPacket(packet *RxPacket) {
 		if err != nil {
 			log.Println(err)
 		} else {
-			report.sender = sender
 			r.reports <- report
 		}
 	} else {
