@@ -8,7 +8,9 @@ import (
 )
 
 const (
-	REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE = 3
+	CURRENT_API_VERSION = 0x01
+
+	REPORT_METRICS_RPC_ID = 3
 )
 
 type ReportMetricsArg struct {
@@ -227,7 +229,7 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	}
 	log.Printf("method: %d\n", method)
 
-	if method == REPORT_METRICS_WITH_NAMES_MESSAGE_TYPE {
+	if method == REPORT_METRICS_RPC_ID {
 		report, err := ParseReportMetricsArg(data, i)
 		if err != nil {
 			log.Println(err)

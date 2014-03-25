@@ -18,17 +18,21 @@ func makeFrame(payload []byte) *XbeeFrame {
 	}
 }
 
-func encode(arg ReportMetricsArg) ([]byte, error) {
+func asRxPacketBytes(arg ReportMetricsArg) ([]byte, error) {
 	buf, err := arg.Serialize()
 	if err != nil {
 		return []byte{}, err
 	}
 
 	appPayload := &bytes.Buffer{}
+
+	// RPC Header
 	appPayload.Write([]byte{
-		0x01, 0x01, // API Version
-		0x01, 0x03, // RPC Method ID
+		0x01, CURRENT_API_VERSION,
+		0x01, REPORT_METRICS_RPC_ID,
 	})
+
+	// RPC Payload
 	appPayload.Write(buf)
 
 	rxPacket := &RxPacket{
@@ -49,23 +53,17 @@ func TestReceiveOneMessage(t *testing.T) {
 	AssertNoError(err, t)
 	relay.Start() // Necessary?
 
-	buf, err := encode(ReportMetricsArg{
+	original := ReportMetricsArg{
 		reporterId: 123456,
-		metrics: map[string]int64{
-			"FOO": 255,
-			"bar": 256,
-		},
-	})
+		metrics: map[string]int64{"FOO": 255,"bar": 256},
+	}
+
+	buf, err := asRxPacketBytes(original)
 	AssertNoError(err, t)
 	fakeSerial.FromDevice <- buf
+	actual := <-reports
 
-	report := <-reports
-
-	ReportsEq(
-		&ReportMetricsArg{
-			reporterId: 123456,
-			metrics:    map[string]int64{"FOO": 255, "bar": 256},
-		}, report, t)
+	ReportsEq(&original, actual, t)
 
 	relay.Shutdown()
 }
