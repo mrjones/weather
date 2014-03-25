@@ -18,11 +18,9 @@ func makeFrame(payload []byte) *XbeeFrame {
 	}
 }
 
-func asRxPacketBytes(arg ReportMetricsArg) ([]byte, error) {
+func asRxPacketBytes(arg ReportMetricsArg, t *testing.T) []byte {
 	buf, err := arg.Serialize()
-	if err != nil {
-		return []byte{}, err
-	}
+	AssertNoError(err, t)
 
 	appPayload := &bytes.Buffer{}
 
@@ -42,7 +40,7 @@ func asRxPacketBytes(arg ReportMetricsArg) ([]byte, error) {
 		payload: appPayload.Bytes(),
 	}
 
-	return makeFrame(rxPacket.Serialize()).Serialize(), nil
+	return makeFrame(rxPacket.Serialize()).Serialize()
 }
 
 func StandardSetUp(t *testing.T) (*SerialPair, chan *ReportMetricsArg, *Relay) {
@@ -64,12 +62,9 @@ func TestReceiveOneMessage(t *testing.T) {
 		metrics: map[string]int64{"FOO": 255,"bar": 256},
 	}
 
-	buf, err := asRxPacketBytes(original)
-	AssertNoError(err, t)
-	fakeSerial.FromDevice <- buf
-	actual := <-reports
+	fakeSerial.FromDevice <- asRxPacketBytes(original, t)
 
-	ReportsEq(&original, actual, t)
+	ReportsEq(&original, <-reports, t)
 
 	relay.Shutdown()
 }
@@ -83,15 +78,11 @@ func TestGarbageBeforeMessage(t *testing.T) {
 		metrics: map[string]int64{"FOO": 255,"bar": 256},
 	}
 
-	buf, err := asRxPacketBytes(original)
-	AssertNoError(err, t)
-
 	// TODO(mrjones): Need to be able to handle a stray 0x7E here
 	fakeSerial.FromDevice <- []byte{0x01, 0x02, 0x03, 0x04, 0x05}
-	fakeSerial.FromDevice <- buf
-	actual := <-reports
+	fakeSerial.FromDevice <- asRxPacketBytes(original, t)
 
-	ReportsEq(&original, actual, t)
+	ReportsEq(&original, <-reports, t)
 
 	relay.Shutdown()
 }
