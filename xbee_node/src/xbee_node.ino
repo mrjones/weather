@@ -66,6 +66,7 @@ void loop() {
 
     xbeeSendVarUint((unsigned long)1);  // protocol version id
     xbeeSendVarUint((unsigned long)3);  // method id
+    xbeeSendVarUint((unsigned long)0x2222); // reporter ID
     xbeeSendVarUint((unsigned long)2);  // num metrics    
     xbeeSendString("es.mrjon.relativeHumidity");
     xbeeSendVarUint((unsigned long)relHumidity);
