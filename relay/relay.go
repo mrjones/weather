@@ -4,7 +4,10 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"time"
 )
 
 const (
@@ -294,6 +297,27 @@ func drainReports(reports <-chan *ReportMetricsArg) {
 	for {
 		report := <-reports
 		log.Println(report.DebugString())
+		for id, value := range(report.metrics) {
+			url := fmt.Sprintf(
+				"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
+				time.Now().Unix(), value, id, report.reporterId)
+			fmt.Printf("URL: %s\n", url)
+
+			resp, err := http.Get(url)
+			if err != nil {
+				log.Println(err);
+				continue;
+			}
+
+			defer resp.Body.Close()
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Println(err);
+				continue;
+			}
+
+			fmt.Printf("Reported metric: %s\n", body)
+		}
 	}
 }
 
