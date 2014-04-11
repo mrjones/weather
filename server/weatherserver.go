@@ -1,9 +1,11 @@
 package weatherserver
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/crc64"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -32,6 +34,7 @@ func init() {
 	http.HandleFunc("/v2/simplereport", handleSimpleReport)
 	http.HandleFunc("/v2/latest", handleLatestV2)
 	http.HandleFunc("/v2/dashboard", handleDashboardV2)
+	http.HandleFunc("/v2/query", handleQuery)
 }
 
 type DataPoint struct {
@@ -39,6 +42,19 @@ type DataPoint struct {
 	Timestamp time.Time
 	Value int64
 	ReporterId int64
+}
+
+
+
+// For JSON
+type JsonDataSeries struct {
+	Points []JsonDataPoint `json:"points"`
+}
+
+type JsonDataPoint struct {
+	Timestamp int64 `json:"ts"`
+	Value int64 `json:"v"`
+	ReporterId int64 `json:"rid"`
 }
 
 func (d *DataPoint) DebugString() string {
@@ -62,6 +78,11 @@ func onError(context string, err error, resp http.ResponseWriter) {
 		fmt.Sprintf("%s: %s\n", context, err.Error())))
 }
 
+func tsid(name string) int64 {
+	crc := crc64.New(crcTable)
+	io.WriteString(crc, name)
+	return int64(crc.Sum64())
+}
 
 // /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
 func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
@@ -75,9 +96,7 @@ func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	crc := crc64.New(crcTable)
-	io.WriteString(crc, timeseriesName)
-	timeseriesId := int64(crc.Sum64())
+	timeseriesId := tsid(timeseriesName)
 
 	timestampSec, err := strconv.ParseInt(req.FormValue("t_sec"), 10, 64)
 	if err != nil {
@@ -134,8 +153,32 @@ func handleLatestV2(resp http.ResponseWriter, req *http.Request) {
 
 
 func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
+//	ctx := appengine.NewContext(req)
+
+	t, err := template.ParseFiles("templates/dashboard.html")
+	if err != nil {
+		onError("parsing template", err, resp)
+	}
+
+	t.Execute(resp, nil)
+}
+
+func handleQuery(resp http.ResponseWriter, req *http.Request) {
 	ctx := appengine.NewContext(req)
+
 	q := datastore.NewQuery("datapoint").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-24 * time.Hour))
+
+	series := &JsonDataSeries{
+		Points: make([]JsonDataPoint, 0),
+	}
+
+	timeseriesName := req.FormValue("tsname")
+	if timeseriesName != "" {
+		timeseriesId := tsid(timeseriesName)
+		q = q.Filter("TimeseriesId =", timeseriesId)
+	}
+
+
 	result := q.Run(ctx)
 
 	for {
@@ -151,9 +194,24 @@ func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 			break
 		}
 
-		resp.Write([]byte(dp.DebugString()))
-		resp.Write([]byte("\n"))
+		jdp := JsonDataPoint{
+			Timestamp: dp.Timestamp.Unix(),
+			Value: dp.Value,
+			ReporterId: dp.ReporterId,
+		}
+
+		series.Points = append(series.Points, jdp);
+
+//		resp.Write([]byte(dp.DebugString()))
+//		resp.Write([]byte("\n"))
 	} 
+
+	b, err := json.Marshal(series)
+	if err != nil {
+		onError("making json", err, resp)
+	}
+
+	resp.Write(b);
 }
 
 func handleDashboard(resp http.ResponseWriter, req *http.Request) {
