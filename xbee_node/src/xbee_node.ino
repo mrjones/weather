@@ -66,12 +66,12 @@ void loop() {
 
     xbeeSendVarUint((unsigned long)1);  // protocol version id
     xbeeSendVarUint((unsigned long)3);  // method id
-    xbeeSendVarUint((unsigned long)0x2222); // reporter ID
+    xbeeSendVarUint((unsigned long)0x1111); // reporter ID
     xbeeSendVarUint((unsigned long)2);  // num metrics    
-    xbeeSendString("es.mrjon.relativeHumidity");
-    xbeeSendVarUint((unsigned long)relHumidity);
-    xbeeSendString("es.mrjon.temperatureF");
-    xbeeSendVarUint((unsigned long)tempF);
+    xbeeSendString("es.mrjon.relativeHumidityMillis");
+    xbeeSendVarUint((unsigned long)(1000 * relHumidity));
+    xbeeSendString("es.mrjon.temperatureFMillis");
+    xbeeSendVarUint((unsigned long)(1000 * tempF));
 
 //    xbeeSendVarUint((unsigned long)1);  // protocol version id
 //    xbeeSendVarUint((unsigned long)1);  // method id
@@ -192,11 +192,11 @@ boolean fetchData(float* relHumidity, float* tempF) {
 
 void xbeeSendVarUint(unsigned long val) {
   int width = 1;
-  if (width > pow(2, 24) - 1) {
+  if (val > pow(2, 24) - 1) {
     width = 4;
-  } else if (width > pow(2, 16) - 1) {
+  } else if (val > pow(2, 16) - 1) {
     width = 3;
-  } else if (width > pow(2, 8) - 1) {
+  } else if (val > pow(2, 8) - 1) {
     width = 2;
   }
 

@@ -53,8 +53,7 @@ type JsonDataSeries struct {
 
 type JsonDataPoint struct {
 	Timestamp int64 `json:"ts"`
-	Value int64 `json:"v"`
-	ReporterId int64 `json:"rid"`
+	Values map[string]int64 `json:"vals"`
 }
 
 func (d *DataPoint) DebugString() string {
@@ -168,9 +167,6 @@ func handleQuery(resp http.ResponseWriter, req *http.Request) {
 
 	q := datastore.NewQuery("datapoint").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-24 * time.Hour))
 
-	series := &JsonDataSeries{
-		Points: make([]JsonDataPoint, 0),
-	}
 
 	timeseriesName := req.FormValue("tsname")
 	if timeseriesName != "" {
@@ -178,9 +174,14 @@ func handleQuery(resp http.ResponseWriter, req *http.Request) {
 		q = q.Filter("TimeseriesId =", timeseriesId)
 	}
 
+	series := JsonDataSeries{
+		Points: make([]JsonDataPoint, 0),
+	}
 
 	result := q.Run(ctx)
 
+	initted := false
+	jdp := JsonDataPoint{}
 	for {
 		var dp DataPoint
 		_, err := result.Next(&dp)
@@ -194,17 +195,18 @@ func handleQuery(resp http.ResponseWriter, req *http.Request) {
 			break
 		}
 
-		jdp := JsonDataPoint{
-			Timestamp: dp.Timestamp.Unix(),
-			Value: dp.Value,
-			ReporterId: dp.ReporterId,
+		if !initted || jdp.Timestamp != dp.Timestamp.Unix() {
+			initted = true
+			jdp = JsonDataPoint{
+				Timestamp: dp.Timestamp.Unix(),
+				Values: make(map[string]int64),
+			}
+			series.Points = append(series.Points, jdp)
 		}
 
-		series.Points = append(series.Points, jdp);
-
-//		resp.Write([]byte(dp.DebugString()))
-//		resp.Write([]byte("\n"))
+		jdp.Values[strconv.FormatInt(dp.ReporterId, 10)] = dp.Value
 	} 
+
 
 	b, err := json.Marshal(series)
 	if err != nil {
