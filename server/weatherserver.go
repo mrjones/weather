@@ -3,6 +3,8 @@ package weatherserver
 import (
 	"errors"
 	"fmt"
+	"hash/crc64"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,11 +14,146 @@ import (
 	"appengine/datastore"
 )
 
+
+var crcTable = crc64.MakeTable(crc64.ECMA)
+//var tsidCache map[string]int64
+
 func init() {
+//	tsidCache = make(map[string]int64)
+
+	http.HandleFunc("/statusz", handleStatus)
+
+	// V1 (deprecated) handlers
 	http.HandleFunc("/upload", handleUpload)
 	http.HandleFunc("/latest", handleLatest)
-	http.HandleFunc("/statusz", handleStatus)
 	http.HandleFunc("/", handleDashboard)
+
+	// V2 (in progress) handlers
+	http.HandleFunc("/v2/simplereport", handleSimpleReport)
+	http.HandleFunc("/v2/latest", handleLatestV2)
+	http.HandleFunc("/v2/dashboard", handleDashboardV2)
+}
+
+type DataPoint struct {
+	TimeseriesId int64
+	Timestamp time.Time
+	Value int64
+	ReporterId int64
+}
+
+func (d *DataPoint) DebugString() string {
+	return fmt.Sprintf(
+		"DataPoint <\n" +
+			"  TimeseriesId: %d\n" +
+			"  Timestamp: %d\n" +
+			"  Value: %d\n" +
+			"  ReporterId: %d\n" +
+			">",
+		d.TimeseriesId,
+		d.Timestamp.UnixNano(),
+		d.Value,
+		d.ReporterId);
+}
+
+func onError(context string, err error, resp http.ResponseWriter) {
+	log.Printf("%s: %s\n", context, err.Error())
+	resp.WriteHeader(http.StatusInternalServerError)
+	resp.Write([]byte(
+		fmt.Sprintf("%s: %s\n", context, err.Error())))
+}
+
+
+// /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
+func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
+
+	point := &DataPoint{}
+
+	timeseriesName := req.FormValue("tsname")
+	if timeseriesName == "" {
+		onError("tsname", fmt.Errorf("missing tsname"), resp)
+		return
+	}
+
+	crc := crc64.New(crcTable)
+	io.WriteString(crc, timeseriesName)
+	timeseriesId := int64(crc.Sum64())
+
+	timestampSec, err := strconv.ParseInt(req.FormValue("t_sec"), 10, 64)
+	if err != nil {
+		onError("t_sec", err, resp)
+		return
+	}
+
+	reporterId, err := strconv.ParseInt(req.FormValue("rid"), 10, 64)
+	if err != nil {
+		onError("rid", err, resp)
+		return
+	}
+
+	value, err := strconv.ParseInt(req.FormValue("v"), 10, 64)
+	if err != nil {
+		onError("v", err, resp)
+		return
+	}
+
+	point = &DataPoint{
+		TimeseriesId: timeseriesId,
+		Timestamp: time.Unix(timestampSec, 0),
+		ReporterId: reporterId,
+		Value: value,
+	}
+
+	key := fmt.Sprintf("%lld-%lld-%s",
+		point.TimeseriesId,
+		point.ReporterId,
+		point.Timestamp.UnixNano())
+
+	_, err = datastore.Put(
+		ctx,
+		datastore.NewKey(ctx, "datapoint", key, 0, nil),
+		point)
+
+	log.Println(point.DebugString())
+
+	resp.Write([]byte("ok"))
+}
+
+func handleLatestV2(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
+
+	q := datastore.NewQuery("datapoint").Order("-Timestamp").Limit(1)
+	var datapoints []DataPoint
+	if _, err := q.GetAll(ctx, &datapoints); err != nil {
+		onError("fetch", err, resp)
+		return
+	}
+	log.Println(datapoints[0].DebugString())
+	resp.Write([]byte(datapoints[0].DebugString()))
+}
+
+
+func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
+	q := datastore.NewQuery("datapoint").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-24 * time.Hour))
+	result := q.Run(ctx)
+
+	for {
+		var dp DataPoint
+		_, err := result.Next(&dp)
+
+		if err == datastore.Done {
+			break
+		}
+
+		if err != nil {
+			ctx.Errorf("Error fetching readings")
+			break
+		}
+
+		resp.Write([]byte(dp.DebugString()))
+		resp.Write([]byte("\n"))
+	} 
 }
 
 func handleDashboard(resp http.ResponseWriter, req *http.Request) {
