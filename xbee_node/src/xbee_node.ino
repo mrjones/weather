@@ -19,7 +19,7 @@ const int XBEE_TX_PIN = 8;  // connected to RX on the XBee
 #include <Wire.h>
 #include <SoftwareSerial.h>
 
-const int REPORTER_ID = 0x0001;
+const int REPORTER_ID = 0x0002;
 
 const int LED_PIN = 13;
 
@@ -58,8 +58,8 @@ void blink(int count, int howLongMs) {
 void loop() {
   float relHumidity;
   float tempF;
-//  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
-  boolean hasData = fetchDataRHT03(&relHumidity, &tempF);
+  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
+//  boolean hasData = fetchDataRHT03(&relHumidity, &tempF);
   
   blink(1, 100);
   if (hasData) {
@@ -164,7 +164,7 @@ boolean fetchDataHIH6130(float* relHumidity, float* tempF) {
     *tempF = 0; 
   } else {
     unsigned int humidityReading = ((unsigned int)(buf[0] & 0x3F) << 8) | buf[1];
-    unsigned int tempReading = ((unsigned int)buf[2] << 6) | (buf[3] & 0x3F);
+    unsigned int tempReading = ((unsigned int)buf[2] << 6) | ((buf[3] & 0xFC) >> 2);
 
     const unsigned int denom = (1 << 14) - 1;
     // Section 4.0 Calculation of the Humidity from the Digital Output 
