@@ -3,6 +3,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -321,7 +322,47 @@ func drainReports(reports <-chan *ReportMetricsArg) {
 	}
 }
 
+type StatusServer struct {
+	port int
+	startTime time.Time
+}
+
+func (s *StatusServer) healthHandler(resp http.ResponseWriter, req *http.Request) {
+	resp.Write([]byte("OK"))
+}
+
+func (s *StatusServer) statusHandler(resp http.ResponseWriter, req *http.Request) {
+	body := fmt.Sprintf(
+		"<h1>Weather Relay</h1>"+
+			"Started: %s (Up: %s)<br/>",
+		s.startTime.Format(time.RFC850),
+		time.Now().Sub(s.startTime).String())
+	resp.Write([]byte(body))
+}
+
+func (s *StatusServer) ServeForever() {
+	http.HandleFunc("/healthz", s.healthHandler)
+	http.HandleFunc("/statusz", s.statusHandler)
+	http.HandleFunc("/", s.statusHandler)
+
+	s.startTime = time.Now()
+	http.ListenAndServe(fmt.Sprintf(":%d", s.port), nil)
+	fmt.Printf("Status port: %d\n", s.port)
+}
+
+func NewStatusServer(port int) *StatusServer {
+	return &StatusServer{port: port}
+}
+
+
 func main() {
+	var statusPort = flag.Int(
+		"status_port",
+		-1,
+		"Port to run a status server on (no server if <= 0).")
+
+	flag.Parse()
+
 	serial, err := NewSerialChannel("/dev/ttyAMA0")
 	if err != nil {
 		log.Fatal(err)
@@ -346,6 +387,13 @@ func main() {
 			log.Printf("Write %d bytes\n", wn)
 		}
 	*/
+
+	if (*statusPort > 0) {
+		statusServer := NewStatusServer(*statusPort)
+		go statusServer.ServeForever()
+	} else {
+		fmt.Printf("No status server (port = %d).\n", *statusPort)
+	}
 
 	shutdown := make(chan bool)
 	<-shutdown

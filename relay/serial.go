@@ -57,8 +57,8 @@ func (sc *SerialChannel) WriteChannel() chan<- []byte {
 }
 
 func (sc *SerialChannel) readLoop() {
-	buf := make([]byte, 1024)
 	for {
+		buf := make([]byte, 1024)
 		n, err := sc.underlyingFile.Read(buf)
 		if err != nil {
 			log.Println(err)

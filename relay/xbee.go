@@ -245,6 +245,7 @@ func (a *RawXbeeDevice) serialIoLoop() {
 	for {
 		select {
 		case buf := <-a.serial.FromDevice:
+			log.Printf("Pulled %s off serial (len:%d addr:%p)\n", arrayAsHex(buf), len(buf), &buf)
 			a.consume(buf, 0, len(buf))
 		case frame := <-a.framesToDevice:
 			if len(frame.payload) != int(frame.length) {
@@ -270,7 +271,7 @@ func (a *RawXbeeDevice) consume(data []byte, offset int, length int) error {
 			offset, offset+length, len(data))
 	}
 
-	fmt.Println("CONSUME: " + arrayAsHexWithLen(data, length))
+	fmt.Printf("CONSUME: %s (start:%d len:%d total:%d addr:%p)\n", arrayAsHexWithLen(data, length), offset, length, len(data), &data)
 
 	for {
 		var err error
@@ -352,16 +353,21 @@ func (a *RawXbeeDevice) copyPayload(data []byte, offset int, len int) (int, erro
 
 	if a.bytesConsumedInState == a.currentFrame.length {
 		a.transition(STATE_CONSUMED_PAYLOAD)
+	} else {
+		log.Printf("Consumed %d of %d bytes.\n", a.bytesConsumedInState, a.currentFrame.length)
 	}
 
 	return consumed, nil
 }
 
 func (a *RawXbeeDevice) parseLength(data []byte, offset int, len int) (int, error) {
+	log.Printf("Extracted length byte: %d @ %d from %s %p\n", data[offset], offset, arrayAsHex(data), &data); 
 	a.currentFrame.length = (a.currentFrame.length << 8) + uint16(data[offset])
+	log.Printf("Length now %d\n", a.currentFrame.length)
 	a.bytesConsumedInState++
 
 	if a.bytesConsumedInState == LENGTH_BYTES {
+		log.Printf("Expecting %d bytes.\n", a.currentFrame.length)
 		a.transition(STATE_PARSED_LENGTH)
 	}
 
@@ -371,6 +377,8 @@ func (a *RawXbeeDevice) parseLength(data []byte, offset int, len int) (int, erro
 func (a *RawXbeeDevice) getSync(data []byte, offset int, len int) (int, error) {
 	if data[offset] == FRAME_DELIMITER {
 		a.transition(STATE_FOUND_FRAME_DELIMITER)
+	} else {
+		log.Printf("Expected FRAME_DELIMITER (0x%x) got 0x%x @ %d of %s %p\n", FRAME_DELIMITER, data[offset], offset, arrayAsHex(data), &data)
 	}
 
 	return 1, nil
