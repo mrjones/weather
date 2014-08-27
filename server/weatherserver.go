@@ -165,7 +165,19 @@ func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 func handleQuery(resp http.ResponseWriter, req *http.Request) {
 	ctx := appengine.NewContext(req)
 
-	q := datastore.NewQuery("datapoint").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-24 * time.Hour))
+	windowSize := 24 * time.Hour
+	windowSizeSecsStr := req.FormValue("secs")
+	if windowSizeSecsStr != "" {
+		windowSizeSecs, err := strconv.Atoi(windowSizeSecsStr)
+		if err != nil {
+			ctx.Errorf("Error parsing '%s': %v", windowSizeSecsStr, err)
+		} else {
+
+			windowSize = time.Duration(windowSizeSecs) * time.Second
+		}
+	}
+
+	q := datastore.NewQuery("datapoint").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-1 * windowSize))
 
 
 	timeseriesName := req.FormValue("tsname")

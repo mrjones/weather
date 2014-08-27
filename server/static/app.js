@@ -6,7 +6,9 @@ function init() {
 }
 
 function renderTimeseries(seriesName, targetDivName) {
-  $.getJSON( "/v2/query?tsname=" + seriesName, function( data ) {
+  var params = window.location.search.replace("\?", "");
+
+  $.getJSON( "/v2/query?tsname=" + seriesName + "&" + params, function( data ) {
     var options;
 
     var table = new google.visualization.DataTable();
