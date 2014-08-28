@@ -29,6 +29,7 @@ type ReportMetricsArg struct {
 }
 
 type ReportErrorArg struct {
+	reporterId uint64
 	errorMessage string
 }
 
@@ -118,6 +119,11 @@ func (m *ReportErrorArg) Serialize()([]byte, error) {
 	buf := make([]byte, 1024)
 	var err error
 
+	err, i = encodeVarUint(&buf, i, m.reporterId)
+	if err != nil {
+		return []byte{}, err
+	}
+
 	err, i = encodeString(&buf, i, m.errorMessage)
 	if err != nil {
 		return []byte{}, err
@@ -129,7 +135,14 @@ func (m *ReportErrorArg) Serialize()([]byte, error) {
 func ParseReportErrorArg(data []byte, offset uint64) (*ReportErrorArg, error) {
 	report := &ReportErrorArg{}
 
-	err, _, message := decodeString(data, offset)
+	err, i, reporterId := decodeVarUint(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	report.reporterId = reporterId
+	log.Printf("reporterId: %d\n", report.reporterId)
+
+	err, i, message := decodeString(data, i)
 	if err != nil {
 		return nil, err
 	}
@@ -387,6 +400,10 @@ func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportError
 				fmt.Printf("Reported metric: %s\n", body)
 			}
 		case error := <-errors:
+			counterName := fmt.Sprintf("errors-reported-by-reporter-%d", error.reporterId)
+			errorCounter := metrics.GetOrRegisterCounter(counterName, nil)
+			errorCounter.Inc(1)
+
 			fmt.Printf("Error reported: %s\n", error.errorMessage)
 		}
 	}

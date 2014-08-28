@@ -202,6 +202,7 @@ func TestParseAndSerializeReportMetricsArgs(t *testing.T) {
 
 func TestParseAndSerializeReportErrorArgs(t *testing.T) {
 	original := &ReportErrorArg{
+		reporterId: 0x12345,
 		errorMessage: "Something went wrong!",
 	}
 
