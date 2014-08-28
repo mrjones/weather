@@ -1,9 +1,12 @@
 // Wiring:
 // 
-// [1] Temperature Sensor
+// [1a] Temperature Sensor: HIH6130
 // Wire SCA & SCL according to: http://arduino.cc/en/reference/wire
 // VDD -> 5V
 // GND -> Ground
+//
+// [1b] Temperature Sensor: RHT03
+const int RHT_PIN = 12;
 //
 // [2] XBee
 // For RX and TX, pick any pins, subject to the limitations at:
@@ -15,6 +18,8 @@ const int XBEE_TX_PIN = 8;  // connected to RX on the XBee
 
 #include <Wire.h>
 #include <SoftwareSerial.h>
+
+const int REPORTER_ID = 0x0002;
 
 const int LED_PIN = 13;
 
@@ -53,10 +58,10 @@ void blink(int count, int howLongMs) {
 void loop() {
   float relHumidity;
   float tempF;
-  boolean hasData = fetchData(&relHumidity, &tempF);
+  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
+//  boolean hasData = fetchDataRHT03(&relHumidity, &tempF);
   
   blink(1, 100);
-
   if (hasData) {
     blink(2, 200);
     Serial.print("Humidity: ");
@@ -66,34 +71,29 @@ void loop() {
 
     xbeeSendVarUint((unsigned long)1);  // protocol version id
     xbeeSendVarUint((unsigned long)3);  // method id
-    xbeeSendVarUint((unsigned long)0x1111); // reporter ID
+    xbeeSendVarUint((unsigned long)REPORTER_ID); // reporter ID
     xbeeSendVarUint((unsigned long)2);  // num metrics    
     xbeeSendString("es.mrjon.relativeHumidityMillis");
     xbeeSendVarUint((unsigned long)(1000 * relHumidity));
     xbeeSendString("es.mrjon.temperatureFMillis");
     xbeeSendVarUint((unsigned long)(1000 * tempF));
-
-//    xbeeSendVarUint((unsigned long)1);  // protocol version id
-//    xbeeSendVarUint((unsigned long)1);  // method id
-//    xbeeSendVarUint((unsigned long)2);  // num metrics    
-//    xbeeSendVarUint((unsigned long)1);  // TODO: negotiate metric IDs
-//    xbeeSendVarUint((unsigned long)relHumidity);
-//    xbeeSendVarUint((unsigned long)2);  // TODO: negotiate metric IDs
-//    xbeeSendVarUint((unsigned long)tempF);
+    delay(60L * 1000);
+  } else {
+    Serial.println("Unable to fetch sensor data");
+    delay(10L * 1000);
   }
   
-  delay(10 * 1000);
 }
 
 // =====================================
-// Temperature Sensor Functions
+// Temperature Sensor Functions: HIH6130
 // =====================================
 
 // See: http://www.phanderson.com/arduino/I2CCommunications.pdf
 // Section 2.1 "Sensor Address"
 const int SENSOR_ADDRESS = 0x27;
 
-boolean fetchData(float* relHumidity, float* tempF) {
+boolean fetchDataHIH6130(float* relHumidity, float* tempF) {
   if (debug >= SOME) { Serial.println("Fetching data..."); }
   
   // Section 2.5: Humidity and Temperature Data Fetch
@@ -164,7 +164,7 @@ boolean fetchData(float* relHumidity, float* tempF) {
     *tempF = 0; 
   } else {
     unsigned int humidityReading = ((unsigned int)(buf[0] & 0x3F) << 8) | buf[1];
-    unsigned int tempReading = ((unsigned int)buf[2] << 6) | (buf[3] & 0x3F);
+    unsigned int tempReading = ((unsigned int)buf[2] << 6) | ((buf[3] & 0xFC) >> 2);
 
     const unsigned int denom = (1 << 14) - 1;
     // Section 4.0 Calculation of the Humidity from the Digital Output 
@@ -185,6 +185,124 @@ boolean fetchData(float* relHumidity, float* tempF) {
   
   return !s0 && !s1;
 }
+
+// =====================================
+// Temperature Sensor Functions: RHT03
+// =====================================
+
+const int RHT_PAYLOAD_SIZE_BYTES = 5;
+// Each payload bit requires two transitions: going low, and then going high
+// Additionally, there is one high/low cycle to begin the protocol, and the
+// protocol terminates by going into the low state.
+const int RHT_EXPECTED_TRANSITIONS = (8 * RHT_PAYLOAD_SIZE_BYTES) * 2 + 3;
+const int RHT_TIMEOUT_US = 255;
+const int RHT_THRESHOLD_US = 40;
+
+boolean fetchDataRHT03(float* relHumidity, float* tempF) {
+  /**
+   ** Signal that we're ready to read data
+   **/
+  int usInStateHistory[RHT_EXPECTED_TRANSITIONS];
+  int actualTransitions = 0;
+
+  pinMode(RHT_PIN, INPUT);
+  digitalWrite(RHT_PIN, HIGH); 
+  delay(250);
+
+  // Pull low for 1-10ms (or >500us depending on doc)
+  pinMode(RHT_PIN, OUTPUT);
+  digitalWrite(RHT_PIN, LOW);
+  delay(10);
+  
+  // Pull low for 20-40us
+  digitalWrite(RHT_PIN, HIGH);
+  delayMicroseconds(40);
+
+  /**
+   ** Read from sensor
+   **/
+  pinMode(RHT_PIN, INPUT);
+  uint8_t prevstate = digitalRead(RHT_PIN);
+  uint8_t curstate = prevstate;
+
+  boolean timedout = false;
+  unsigned long lastRead = -1;
+  unsigned long stateBeginTimestamp = micros();
+
+  // Leave room to read a few extra bits.  In the normal case we'll timeout
+  // and not fill any of these bits.  However, if something is wrong, we'll
+  // detect below that we observed too many transitions and bail out.
+  const int MARGIN_FOR_ERROR = 5;
+  
+  for (int i = 0; i < RHT_EXPECTED_TRANSITIONS + MARGIN_FOR_ERROR; i++) {
+    int count = 0;
+    unsigned long usInState = 0;
+    while (curstate == prevstate) {
+      curstate = digitalRead(RHT_PIN);
+//      Serial.println(curstate);
+      lastRead = micros();
+      ++count;
+      usInState = lastRead - stateBeginTimestamp;
+      if (usInState >= RHT_TIMEOUT_US) {
+        timedout = true;
+        break;
+      }
+    }
+    
+    if (timedout) {
+      break;
+    }
+    
+    stateBeginTimestamp = lastRead;
+    prevstate = curstate;
+    actualTransitions++;
+    
+    if (i < RHT_EXPECTED_TRANSITIONS) {
+      // usInStateHistory only stores 'EXPECTED_TRANSITIONS' elements
+      usInStateHistory[i] = usInState;
+    }
+  }
+  
+  if (actualTransitions != RHT_EXPECTED_TRANSITIONS) {
+    Serial.print("Didn't get the right number of points: ");
+    Serial.println(actualTransitions);
+    return false;
+  }
+  
+  /**
+   ** Parse and validate payload
+   **/
+  uint8_t payload[RHT_PAYLOAD_SIZE_BYTES];
+  for (int b = 0; b < RHT_PAYLOAD_SIZE_BYTES; b++) {
+    payload[b] = 0;
+    for (int i = 0; i < 8; i++) {
+      payload[b] <<= 1;
+      if (usInStateHistory[2 + 2 * (8 * b + i) + 1] > RHT_THRESHOLD_US) {
+        payload[b] |= 1; 
+      }
+    }
+  }
+  
+  uint8_t expectedSum = payload[0] + payload[1] + payload[2] + payload[3];
+  
+  if (expectedSum != payload[4]) {
+    Serial.println("Checksum: BAD");
+    return false;
+  } else {
+    if (debug >= ALL) {
+      Serial.println("Checksum: OK");
+    }
+  }
+  
+  unsigned int h = (payload[0] << 8) + payload[1];
+  unsigned int tc = (payload[2] << 8) + payload[3];
+  
+  *relHumidity = h / 10.0;
+  *tempF = (tc / 10.0) * 9 / 5 + 32;
+  
+  return true;
+}
+
 
 // =====================================
 // XBee Functions
