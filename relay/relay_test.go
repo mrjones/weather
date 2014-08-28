@@ -22,10 +22,17 @@ func ReportsEq(expected, actual *ReportMetricsArg, t *testing.T) {
 	}
 }
 
+func ErrorReportsEq(expected, actual *ReportErrorArg, t *testing.T) {
+	if expected.errorMessage != actual.errorMessage {
+		t.Errorf("ReportErrorArgs don't match in 'errorMessage' param.\nExpected: 0x%x.\nActual: 0x%x.", expected.errorMessage, actual.errorMessage)
+	}
+}
+
 func TestMetricReport(t *testing.T) {
 	packets := NewPacketPair(0)
 	reports := make(chan *ReportMetricsArg)
-	relay, err := NewRelay(packets, reports)
+	errors := make(chan *ReportErrorArg)
+	relay, err := NewRelay(packets, reports, errors)
 	AssertNoError(err, t)
 
 	packets.FromDevice <- &RxPacket{
@@ -60,7 +67,8 @@ func TestMetricReport(t *testing.T) {
 func TestMalformedMetricReport(t *testing.T) {
 	packets := NewPacketPair(0)
 	reports := make(chan *ReportMetricsArg)
-	relay, err := NewRelay(packets, reports)
+	errors := make(chan *ReportErrorArg)
+	relay, err := NewRelay(packets, reports, errors)
 	AssertNoError(err, t)
 
 	packets.FromDevice <- &RxPacket{
@@ -84,7 +92,8 @@ func TestMalformedMetricReport(t *testing.T) {
 func TestUnsupportedProtocolVersion(t *testing.T) {
 	packets := NewPacketPair(0)
 	reports := make(chan *ReportMetricsArg)
-	relay, err := NewRelay(packets, reports)
+	errors := make(chan *ReportErrorArg)
+	relay, err := NewRelay(packets, reports, errors)
 	AssertNoError(err, t)
 
 	packets.FromDevice <- &RxPacket{
@@ -108,7 +117,8 @@ func TestUnsupportedProtocolVersion(t *testing.T) {
 func TestUnknownMethod(t *testing.T) {
 	packets := NewPacketPair(0)
 	reports := make(chan *ReportMetricsArg)
-	relay, err := NewRelay(packets, reports)
+	errors := make(chan *ReportErrorArg)
+	relay, err := NewRelay(packets, reports, errors)
 	AssertNoError(err, t)
 
 	packets.FromDevice <- &RxPacket{
@@ -132,7 +142,8 @@ func TestUnknownMethod(t *testing.T) {
 func TestReadMessageAfterError(t *testing.T) {
 	packets := NewPacketPair(0)
 	reports := make(chan *ReportMetricsArg)
-	relay, err := NewRelay(packets, reports)
+	errors := make(chan *ReportErrorArg)
+	relay, err := NewRelay(packets, reports, errors)
 	AssertNoError(err, t)
 
 	packets.FromDevice <- &RxPacket{
@@ -170,7 +181,7 @@ func TestReadMessageAfterError(t *testing.T) {
 
 // ===============
 
-func TestParseAndSerializeRpcArgs(t *testing.T) {
+func TestParseAndSerializeReportMetricsArgs(t *testing.T) {
 	original := &ReportMetricsArg{
 		reporterId: 0xFFFF,
 		metrics: map[string]int64{
@@ -187,4 +198,19 @@ func TestParseAndSerializeRpcArgs(t *testing.T) {
 	result, err := ParseReportMetricsArg(encoded, 0)
 	AssertNoError(err, t)
 	ReportsEq(original, result, t)
+}
+
+func TestParseAndSerializeReportErrorArgs(t *testing.T) {
+	original := &ReportErrorArg{
+		errorMessage: "Something went wrong!",
+	}
+
+	encoded, err := original.Serialize()
+	AssertNoError(err, t)
+
+	fmt.Printf("ENCODED: %s\n", arrayAsHex(encoded))
+
+	result, err := ParseReportErrorArg(encoded, 0)
+	AssertNoError(err, t)
+	ErrorReportsEq(original, result, t)
 }

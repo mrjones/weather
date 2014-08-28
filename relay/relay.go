@@ -3,23 +3,33 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"net/http"
 	"time"
+
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
 	CURRENT_API_VERSION = 0x01
 
 	REPORT_METRICS_RPC_ID = 3
+	REPORT_ERROR_RPC_ID = 4
 )
 
 type ReportMetricsArg struct {
 	reporterId uint64
 	metrics    map[string]int64 // map from name to value
+}
+
+type ReportErrorArg struct {
+	errorMessage string
 }
 
 func (m *ReportMetricsArg) DebugString() string {
@@ -103,6 +113,32 @@ func ParseReportMetricsArg(data []byte, offset uint64) (*ReportMetricsArg, error
 	return report, nil
 }
 
+func (m *ReportErrorArg) Serialize()([]byte, error) {
+	i := uint64(0)
+	buf := make([]byte, 1024)
+	var err error
+
+	err, i = encodeString(&buf, i, m.errorMessage)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	return buf[:i], nil
+}
+
+func ParseReportErrorArg(data []byte, offset uint64) (*ReportErrorArg, error) {
+	report := &ReportErrorArg{}
+
+	err, _, message := decodeString(data, offset)
+	if err != nil {
+		return nil, err
+	}
+	report.errorMessage = message
+	log.Printf("error message: %d\n", report.errorMessage)
+
+	return report, nil
+}
+
 func arrayAsHex(a []byte) string {
 	return arrayAsHexWithLen(a, len(a))
 }
@@ -117,7 +153,10 @@ func arrayAsHexWithLen(a []byte, length int) string {
 }
 
 func encodeString(data *[]byte, offset uint64, s string) (e error, pos uint64) {
-	length := uint64(len(s))
+	sBytes := []byte(s)
+
+	length := uint64(len(sBytes))
+	log.Printf("Length of '%s' is '%d'", s, length)
 	err, offset := encodeVarUint(data, offset, length)
 	if err != nil {
 		return err, offset
@@ -129,7 +168,7 @@ func encodeString(data *[]byte, offset uint64, s string) (e error, pos uint64) {
 	}
 
 	for i := uint64(0); i < length; i++ {
-		(*data)[offset] = s[i]
+		(*data)[offset] = sBytes[i]
 		offset++
 	}
 
@@ -174,7 +213,7 @@ func decodeString(data []byte, offset uint64) (e error, pos uint64, s string) {
 		return err, offset, ""
 	}
 
-	if uint64(offset)+length >= uint64(len(data)) {
+	if uint64(offset)+length > uint64(len(data)) {
 		return fmt.Errorf("Can't parse string of length %d startting at %d. Length is only %d.", length, offset, len(data)), offset, ""
 	}
 
@@ -207,6 +246,7 @@ func decodeVarUint(data []byte, offset uint64) (e error, pos uint64, val uint64)
 }
 
 func (r *Relay) processPacket(packet *RxPacket) {
+
 	data := packet.payload
 	sender := packet.sender
 
@@ -220,6 +260,9 @@ func (r *Relay) processPacket(packet *RxPacket) {
 		return
 	}
 	if protocolVersion != 1 {
+		badVersion := metrics.GetOrRegisterCounter("unknown-protocol-version", nil)
+		badVersion.Inc(1)
+
 		fmt.Println(fmt.Errorf("Unsupported protocol version %d.", protocolVersion))
 		return
 	}
@@ -236,11 +279,24 @@ func (r *Relay) processPacket(packet *RxPacket) {
 	if method == REPORT_METRICS_RPC_ID {
 		report, err := ParseReportMetricsArg(data, i)
 		if err != nil {
+			malformedMessages := metrics.GetOrRegisterCounter("malformed-report-metrics-messages", nil)
+			malformedMessages.Inc(1)
 			log.Println(err)
 		} else {
 			r.reports <- report
 		}
+	} else if method == REPORT_ERROR_RPC_ID {
+		errorReport, err := ParseReportErrorArg(data, i)
+		if err != nil {
+			malformedMessages := metrics.GetOrRegisterCounter("malformed-report-errors-messages", nil)
+			malformedMessages.Inc(1)
+			log.Println(err)
+		} else {
+			r.errors <- errorReport
+		}
 	} else {
+		unknownMethod := metrics.GetOrRegisterCounter("unknown-method-count", nil)
+		unknownMethod.Inc(1)
 		fmt.Println(fmt.Errorf("Unknown method %d", method))
 	}
 }
@@ -250,24 +306,26 @@ type Relay struct {
 	metricIds map[string]uint
 	nextId    uint
 	reports   chan<- *ReportMetricsArg
+	errors   chan<- *ReportErrorArg
 	shutdown  bool
 }
 
-func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg) (*Relay, error) {
+func MakeRelay(serial *SerialPair, reports chan *ReportMetricsArg, errors chan *ReportErrorArg) (*Relay, error) {
 	framesFromDevice := make(chan *XbeeFrame)
 	framesToDevice := make(chan *XbeeFrame)
 	_ = NewRawXbeeDevice(serial, framesFromDevice, framesToDevice)
 	xbee := NewXbeeConnection(framesFromDevice, framesToDevice)
 
-	return NewRelay(xbee.IO(), reports)
+	return NewRelay(xbee.IO(), reports, errors)
 }
 
-func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg) (*Relay, error) {
+func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg, errors chan<- *ReportErrorArg) (*Relay, error) {
 	r := &Relay{
 		packets:   packets,
 		metricIds: make(map[string]uint),
 		nextId:    0,
 		reports:   reports,
+		errors: errors,
 	}
 	go r.loop()
 	return r, nil
@@ -283,6 +341,7 @@ func (r *Relay) Shutdown() {
 }
 
 func (r *Relay) loop() {
+	packets := metrics.GetOrRegisterCounter("xbee-rx-packets-processed", nil)
 	for {
 		packet, ok := <-r.packets.FromDevice
 		if !ok {
@@ -290,34 +349,45 @@ func (r *Relay) loop() {
 			r.Shutdown()
 			return
 		}
+		packets.Inc(1)
 		r.processPacket(packet)
 	}
 }
 
-func drainReports(reports <-chan *ReportMetricsArg) {
+func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportErrorArg) {
+	successCounter := metrics.GetOrRegisterCounter("report-to-hub-successes", nil)
+	errorCounter := metrics.GetOrRegisterCounter("report-to-hub-errors", nil)
+
 	for {
-		report := <-reports
-		log.Println(report.DebugString())
-		for id, value := range(report.metrics) {
-			url := fmt.Sprintf(
-				"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
-				time.Now().Unix(), value, id, report.reporterId)
-			fmt.Printf("URL: %s\n", url)
+		select {
+		case report := <-reports:
+			log.Println(report.DebugString())
+			for id, value := range(report.metrics) {
+				url := fmt.Sprintf(
+					"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
+					time.Now().Unix(), value, id, report.reporterId)
+				fmt.Printf("URL: %s\n", url)
 
-			resp, err := http.Get(url)
-			if err != nil {
-				log.Println(err);
-				continue;
+				resp, err := http.Get(url)
+				if err != nil {
+					errorCounter.Inc(1)
+					log.Println(err);
+					continue;
+				}
+
+				defer resp.Body.Close()
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					errorCounter.Inc(1)
+					log.Println(err);
+					continue;
+				}
+
+				successCounter.Inc(1)
+				fmt.Printf("Reported metric: %s\n", body)
 			}
-
-			defer resp.Body.Close()
-			body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				log.Println(err);
-				continue;
-			}
-
-			fmt.Printf("Reported metric: %s\n", body)
+		case error := <-errors:
+			fmt.Printf("Error reported: %s\n", error.errorMessage)
 		}
 	}
 }
@@ -332,17 +402,42 @@ func (s *StatusServer) healthHandler(resp http.ResponseWriter, req *http.Request
 }
 
 func (s *StatusServer) statusHandler(resp http.ResponseWriter, req *http.Request) {
+	var buf bytes.Buffer
+
+	metrics.WriteOnce(metrics.DefaultRegistry, &buf)
+
 	body := fmt.Sprintf(
 		"<h1>Weather Relay</h1>"+
-			"Started: %s (Up: %s)<br/>",
+			"Started: %s (Up: %s)<br/>"+
+			"<a href='/logz'>Logs</a><br/>"+
+			"<hr><h2>Metrics</h2><pre>%s</pre>",
 		s.startTime.Format(time.RFC850),
-		time.Now().Sub(s.startTime).String())
+		time.Now().Sub(s.startTime).String(),
+		buf.String())
 	resp.Write([]byte(body))
+}
+
+func (s *StatusServer) logHandler(resp http.ResponseWriter, req *http.Request) {
+	f, err := os.Open("/var/log/weather/relay/relay.log")
+	if err != nil {
+		log.Println(err)
+		resp.Write([]byte(err.Error()))
+		return
+	}
+
+	_, err = io.Copy(resp, f)
+	if err != nil {
+		log.Println(err)
+		resp.Write([]byte(err.Error()))
+		return
+	}
+	
 }
 
 func (s *StatusServer) ServeForever() {
 	http.HandleFunc("/healthz", s.healthHandler)
 	http.HandleFunc("/statusz", s.statusHandler)
+	http.HandleFunc("/logz", s.logHandler)
 	http.HandleFunc("/", s.statusHandler)
 
 	s.startTime = time.Now()
@@ -369,8 +464,9 @@ func main() {
 	}
 
 	reports := make(chan *ReportMetricsArg)
-	go drainReports(reports)
-	relay, err := MakeRelay(serial.Pair(), reports)
+	errors := make(chan *ReportErrorArg)
+	go handleIncoming(reports, errors)
+	relay, err := MakeRelay(serial.Pair(), reports, errors)
 	if err != nil {
 		log.Fatal(err)
 	}

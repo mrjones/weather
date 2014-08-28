@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
+
+	"github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -174,11 +176,15 @@ func (x *XbeeConnection) processIncomingFrame(frame *XbeeFrame) {
 	if data[0] == RX_PACKET_16BIT {
 		packet, err := ParseRxPacket(data)
 		if err != nil {
+			invalidPackets := metrics.GetOrRegisterCounter("invalid-xbee-rx-packets", nil)
+			invalidPackets.Inc(1)
 			fmt.Println(err)
 		} else {
 			x.rxData <- packet
 		}
 	} else {
+		unknownType := metrics.GetOrRegisterCounter("unknown-xbee-message-type", nil)
+		unknownType.Inc(1)
 		fmt.Printf("Unknown message type 0x%x: %s\n", data[0], arrayAsHex(data))
 	}
 }
@@ -242,11 +248,14 @@ func (x *RawXbeeDevice) Shutdown() {
 }
 
 func (a *RawXbeeDevice) serialIoLoop() {
+	bytesRead := metrics.GetOrRegisterCounter("serial-bytes-read", nil)
+	bytesWritten := metrics.GetOrRegisterCounter("serial-bytes-written", nil)
 	for {
 		select {
 		case buf := <-a.serial.FromDevice:
 			log.Printf("Pulled %s off serial (len:%d addr:%p)\n", arrayAsHex(buf), len(buf), &buf)
 			a.consume(buf, 0, len(buf))
+			bytesRead.Inc(int64(len(buf)))
 		case frame := <-a.framesToDevice:
 			if len(frame.payload) != int(frame.length) {
 				fmt.Printf("Malformed length field")
@@ -261,6 +270,7 @@ func (a *RawXbeeDevice) serialIoLoop() {
 			}
 			payload[len(payload)-1] = frame.checksum
 			a.serial.ToDevice <- payload
+			bytesWritten.Inc(int64(len(payload)))
 		}
 	}
 }
@@ -326,10 +336,14 @@ func (a *RawXbeeDevice) verifyChecksum(data []byte, offset int, len int) (int, e
 	v = (v + int(a.currentFrame.checksum)) & 0xFF
 
 	if v == 0xFF {
+		xbeeFrames := metrics.GetOrRegisterCounter("xbee-frames-processed", nil)
+		xbeeFrames.Inc(1)
 		fmt.Println("Valid checksum! Sending frame")
 		a.framesFromDevice <- a.currentFrame
 		a.reset()
 	} else {
+		badChecksums := metrics.GetOrRegisterCounter("invalid-xbee-frame-checksums", nil)
+		badChecksums.Inc(1)
 		fmt.Printf("Invalid checksum (0x%x)! Dropping frame.\n", v)
 		a.reset()
 		return 1, fmt.Errorf("Invalid checksum: 0x%x", v)
