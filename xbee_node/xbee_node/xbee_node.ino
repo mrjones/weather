@@ -58,12 +58,12 @@ void blink(int count, int howLongMs) {
 void loop() {
   float relHumidity;
   float tempF;
+  String errorMessage = "<not set>";
 //  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
-  boolean hasData = fetchDataRHT03(&relHumidity, &tempF);
+  boolean hasData = fetchDataRHT03(&relHumidity, &tempF, &errorMessage);
   
   blink(1, 100);
   if (hasData) {
-    blink(2, 200);
     Serial.print("Humidity: ");
     Serial.println((int)relHumidity);
     Serial.print("Temperature: ");
@@ -77,12 +77,17 @@ void loop() {
     xbeeSendVarUint((unsigned long)(1000 * relHumidity));
     xbeeSendString("es.mrjon.temperatureFMillis");
     xbeeSendVarUint((unsigned long)(1000 * tempF));
-    delay(60L * 1000);
+
   } else {
+    blink(2, 500);
     Serial.println("Unable to fetch sensor data");
-    delay(10L * 1000);
+    
+    xbeeSendVarUint((unsigned long)1);  // protocol version id
+    xbeeSendVarUint((unsigned long)4);  // method id
+    xbeeSendVarUint((unsigned long)REPORTER_ID); // reporter ID
+    xbeeSendString(errorMessage);
   }
-  
+  delay(60L * 1000);
 }
 
 // =====================================
@@ -198,7 +203,7 @@ const int RHT_EXPECTED_TRANSITIONS = (8 * RHT_PAYLOAD_SIZE_BYTES) * 2 + 3;
 const int RHT_TIMEOUT_US = 255;
 const int RHT_THRESHOLD_US = 40;
 
-boolean fetchDataRHT03(float* relHumidity, float* tempF) {
+boolean fetchDataRHT03(float* relHumidity, float* tempF, String* errorMessage) {
   /**
    ** Signal that we're ready to read data
    **/
@@ -266,6 +271,7 @@ boolean fetchDataRHT03(float* relHumidity, float* tempF) {
   if (actualTransitions != RHT_EXPECTED_TRANSITIONS) {
     Serial.print("Didn't get the right number of points: ");
     Serial.println(actualTransitions);
+    *errorMessage = "Didn't get enough bits from sensor.";
     return false;
   }
   
@@ -287,6 +293,7 @@ boolean fetchDataRHT03(float* relHumidity, float* tempF) {
   
   if (expectedSum != payload[4]) {
     Serial.println("Checksum: BAD");
+    *errorMessage = "Bad checksum";
     return false;
   } else {
     if (debug >= ALL) {
