@@ -6,20 +6,20 @@
 // GND -> Ground
 //
 // [1b] Temperature Sensor: RHT03
-const int RHT_PIN = 12;
+const int RHT_PIN = 4;
 //
 // [2] XBee
 // For RX and TX, pick any pins, subject to the limitations at:
 // http://arduino.cc/en/Reference/SoftwareSerial
-const int XBEE_RX_PIN = 9;  // connected to TX on the XBee
-const int XBEE_TX_PIN = 8;  // connected to RX on the XBee
+const int XBEE_RX_PIN = 2;  // connected to TX on the XBee
+const int XBEE_TX_PIN = 3;  // connected to RX on the XBee
 // +5  -> 5V
 // GND -> Ground
 
 #include <Wire.h>
 #include <SoftwareSerial.h>
 
-const int REPORTER_ID = 0x0002;
+const int REPORTER_ID = 0x0003;
 
 const int LED_PIN = 13;
 
@@ -58,8 +58,8 @@ void blink(int count, int howLongMs) {
 void loop() {
   float relHumidity;
   float tempF;
-  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
-//  boolean hasData = fetchDataRHT03(&relHumidity, &tempF);
+//  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
+  boolean hasData = fetchDataRHT03(&relHumidity, &tempF);
   
   blink(1, 100);
   if (hasData) {
