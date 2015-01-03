@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"appengine"
-	"appengine/datastore"
 )
 
 
@@ -26,7 +25,6 @@ func init() {
 
 	// V2 (in progress) handlers
 	http.HandleFunc("/v2/simplereport", handleSimpleReport)
-	http.HandleFunc("/v2/latest", handleLatestV2)
 	http.HandleFunc("/v2/dashboard", handleDashboardV2)
 	http.HandleFunc("/v2/query", handleQuery)
 }
@@ -126,20 +124,6 @@ func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
 
 	resp.Write([]byte("ok"))
 }
-
-func handleLatestV2(resp http.ResponseWriter, req *http.Request) {
-	ctx := appengine.NewContext(req)
-
-	q := datastore.NewQuery("datapoint").Order("-Timestamp").Limit(1)
-	var datapoints []DataPoint
-	if _, err := q.GetAll(ctx, &datapoints); err != nil {
-		onError("fetch", err, resp)
-		return
-	}
-	log.Println(datapoints[0].DebugString())
-	resp.Write([]byte(datapoints[0].DebugString()))
-}
-
 
 func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 //	ctx := appengine.NewContext(req)
