@@ -79,7 +79,12 @@ func tsid(name string) int64 {
 
 // /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
 func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
-	ctx := appengine.NewContext(req)
+	storage, err := NewAppEngineStorage(req)
+
+	if err != nil {
+		onError("storage", err, resp)
+		return
+	}
 
 	point := &DataPoint{}
 
@@ -116,16 +121,7 @@ func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
 		Value: value,
 	}
 
-	key := fmt.Sprintf("%lld-%lld-%s",
-		point.TimeseriesId,
-		point.ReporterId,
-		point.Timestamp.UnixNano())
-
-	_, err = datastore.Put(
-		ctx,
-		datastore.NewKey(ctx, "datapoint", key, 0, nil),
-		point)
-
+	err = storage.Put(point)
 	log.Println(point.DebugString())
 
 	resp.Write([]byte("ok"))
@@ -158,6 +154,11 @@ func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 
 func handleQuery(resp http.ResponseWriter, req *http.Request) {
 	ctx := appengine.NewContext(req)
+	storage, err := NewAppEngineStorage(req)
+	if err != nil {
+		ctx.Errorf("Error loading storage: %v", err)
+		return
+	}
 
 	windowSize := 24 * time.Hour
 	windowSizeSecsStr := req.FormValue("secs")
@@ -169,49 +170,48 @@ func handleQuery(resp http.ResponseWriter, req *http.Request) {
 			windowSize = time.Duration(windowSizeSecs) * time.Second
 		}
 	}
-
-	q := datastore.NewQuery("datapoint").Order("Timestamp").Filter("Timestamp >", time.Now().Add(-1 * windowSize))
-
-
+	
 	timeseriesName := req.FormValue("tsname")
-	if timeseriesName != "" {
-		timeseriesId := tsid(timeseriesName)
-		q = q.Filter("TimeseriesId =", timeseriesId)
-	}
+	points, errors := storage.Scan(
+		time.Now().Add(-1 * windowSize),
+		time.Now(),
+		timeseriesName)
 
 	series := JsonDataSeries{
 		Points: make([]JsonDataPoint, 0),
 	}
 
-	result := q.Run(ctx)
-
-	initted := false
+	first := true
 	jdp := JsonDataPoint{}
-	for {
-		var dp DataPoint
-		_, err := result.Next(&dp)
-
-		if err == datastore.Done {
-			break
-		}
-
-		if err != nil {
-			ctx.Errorf("Error fetching readings")
-			break
-		}
-
-		if !initted || jdp.Timestamp != dp.Timestamp.Unix() {
-			initted = true
-			jdp = JsonDataPoint{
-				Timestamp: dp.Timestamp.Unix(),
-				Values: make(map[string]int64),
+	done := false
+	for !done {
+		select {
+		case dp, ok := <-points:
+			if (!ok) {
+				// channel is closed
+				done = true
+				break
 			}
-			series.Points = append(series.Points, jdp)
+			if first || jdp.Timestamp != dp.Timestamp.Unix() {
+				first = false
+				jdp = JsonDataPoint{
+					Timestamp: dp.Timestamp.Unix(),
+					Values: make(map[string]int64),
+				}
+				series.Points = append(series.Points, jdp)
+			}
+
+			jdp.Values[strconv.FormatInt(dp.ReporterId, 10)] = dp.Value
+		case err, ok := <- errors:
+			if !ok {
+				done = true
+				break
+			}
+
+			ctx.Errorf("Error fetching readings: %v", err)
+			return
 		}
-
-		jdp.Values[strconv.FormatInt(dp.ReporterId, 10)] = dp.Value
 	} 
-
 
 	b, err := json.Marshal(series)
 	if err != nil {
