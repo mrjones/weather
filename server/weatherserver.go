@@ -18,15 +18,24 @@ import (
 var crcTable = crc64.MakeTable(crc64.ECMA)
 //var tsidCache map[string]int64
 
+type Server struct {
+	storageFactory *StorageFactory
+}
+
+var server *Server
+
 func init() {
 //	tsidCache = make(map[string]int64)
+	server = &Server{
+		storageFactory: &StorageFactory{},
+	}
 
-	http.HandleFunc("/statusz", handleStatus)
+	http.HandleFunc("/statusz", server.handleStatus)
 
 	// V2 (in progress) handlers
-	http.HandleFunc("/v2/simplereport", handleSimpleReport)
-	http.HandleFunc("/v2/dashboard", handleDashboardV2)
-	http.HandleFunc("/v2/query", handleQuery)
+	http.HandleFunc("/v2/simplereport", server.handleSimpleReport)
+	http.HandleFunc("/v2/dashboard", server.handleDashboardV2)
+	http.HandleFunc("/v2/query", server.handleQuery)
 }
 
 type DataPoint struct {
@@ -76,8 +85,8 @@ func tsid(name string) int64 {
 }
 
 // /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
-func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
-	storage, err := NewAppEngineStorage(req)
+func (s *Server) handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
+	storage, err := s.storageFactory.NewStorage(req)
 
 	if err != nil {
 		onError("storage", err, resp)
@@ -119,13 +128,18 @@ func handleSimpleReport(resp http.ResponseWriter, req *http.Request) {
 		Value: value,
 	}
 
+	log.Println("Storing: " + point.DebugString())
 	err = storage.Put(point)
-	log.Println(point.DebugString())
 
-	resp.Write([]byte("ok"))
+	if err != nil {
+		log.Println("Error storing point: %v", err)
+		resp.Write([]byte(err.Error()))
+	} else {
+		resp.Write([]byte("ok"))
+	}
 }
 
-func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
+func (s *Server) handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 //	ctx := appengine.NewContext(req)
 
 	t, err := template.ParseFiles("templates/dashboard.html")
@@ -136,9 +150,9 @@ func handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 	t.Execute(resp, nil)
 }
 
-func handleQuery(resp http.ResponseWriter, req *http.Request) {
+func (s *Server) handleQuery(resp http.ResponseWriter, req *http.Request) {
 	ctx := appengine.NewContext(req)
-	storage, err := NewAppEngineStorage(req)
+	storage, err := s.storageFactory.NewStorage(req)
 	if err != nil {
 		ctx.Errorf("Error loading storage: %v", err)
 		return
@@ -205,7 +219,7 @@ func handleQuery(resp http.ResponseWriter, req *http.Request) {
 	resp.Write(b);
 }
 
-func handleStatus(resp http.ResponseWriter, req *http.Request) {
+func (s *Server) handleStatus(resp http.ResponseWriter, req *http.Request) {
 	for k,vs := range(req.Header) {
 		log.Printf("%s=%vs\n", k, vs)
 	}

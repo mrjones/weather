@@ -4,17 +4,92 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+	"database/sql"
+	_ "github.com/ziutek/mymysql/godrv"
 
 	"appengine"
 	"appengine/datastore"
 )
 
 type Storage interface {
-     Put(d *DataPoint) error
+	Put(d *DataPoint) error
 
-     Scan(start, end time.Time) (<-chan *DataPoint, error)
+	Scan(start, end time.Time, seriesName string) (<-chan *DataPoint, <-chan error)
 }
 
+type StorageFactory struct {
+	
+}
+
+func (f *StorageFactory) NewStorage(req *http.Request) (Storage, error) {
+	return NewAppEngineStorage(req)
+//	return NewMySqlStorage("test", "test")
+}
+
+// ===================================================================
+// MySqlStorage
+// ===================================================================
+//
+// mysql> CREATE TABLE history (value BIGINT NOT NULL, series_id BIGINT NOT NULL, timestamp DATETIME NOT NULL, reporter_id INT NOT NULL, PRIMARY KEY(series_id, timestamp, reporter_id));
+
+type MySqlStorage struct {
+	user string
+	password string
+}
+
+func NewMySqlStorage(user, password string) (*MySqlStorage, error) {
+	return &MySqlStorage{
+		user: user,
+		password: password,
+	}, nil
+}
+
+
+
+func (s *MySqlStorage) Put(p *DataPoint) error {
+//	conn, err := sql.Open("mymysql", database+"/"+user+"/"+password)
+//	conn, err := sql.Open("mymysql",
+//		fmt.Sprintf("cloudsql:sql-fortress:fortress-one*weather/%s/%s",
+//			s.user, s.password))
+	conn, err := sql.Open("mymysql", "tcp:127.0.0.1*weather/weather/weather")
+	defer conn.Close()
+
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.Exec("INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)",
+		p.Value, p.TimeseriesId, p.Timestamp, p.ReporterId)
+
+	return err
+}
+
+
+func (s *MySqlStorage) Scan(start, end time.Time, seriesName string) (<-chan *DataPoint, <-chan error) {
+	points := make(chan *DataPoint)
+	errors := make(chan error)
+
+	go s.doScan(start, end, seriesName, points, errors)
+	return points, errors
+}
+
+func (s *MySqlStorage) doScan(start, end time.Time, seriesName string, points chan<- *DataPoint, errors chan<- error) {
+//	conn, err := sql.Open("mymysql",
+//		fmt.Sprintf("cloudsql:sql-fortress:fortress-one*weather/%s/%s",
+//			s.user, s.password))
+//	defer conn.Close()
+	defer close(errors)
+	defer close(points)
+//
+//	if err != nil {
+//		errors <- err
+//		return
+//	}
+}
+
+// ===================================================================
+// AppEngineStorage
+// ===================================================================
 
 type AppEngineStorage struct {
 	context appengine.Context
