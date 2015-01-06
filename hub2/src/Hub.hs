@@ -23,6 +23,8 @@ import Text.Read (readMaybe)
 main :: IO ()
 main = serve $ HubConfig 5999 "weather" "weather" "localhost"
 
+type SeriesID = Word32
+
 data HubConfig =
   HubConfig { hubPort :: Int
             , hubDbUsername :: String
@@ -31,7 +33,7 @@ data HubConfig =
             }
 
 data DataPoint =
-  DataPoint { dpTimeseriesId :: Word32
+  DataPoint { dpSeriesId :: SeriesID
             , dpTimestamp :: UTCTime
             , dpValue :: Int
             , dpReporterId :: Int
@@ -65,7 +67,7 @@ dbConnect username password hostname = MySQL.connect defaultConnectInfo
 
 storeDataPoint :: MySQL.Connection -> DataPoint -> IO Bool
 storeDataPoint conn dp = do
-  fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpTimeseriesId dp, dpTimestamp dp, dpReporterId dp)
+  fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpSeriesId dp, dpTimestamp dp, dpReporterId dp)
 
 --
 -- Misc/common
@@ -75,7 +77,12 @@ verboseReadEither :: Read a => String -> Either String a
 verboseReadEither s = case readMaybe s of
   Just v -> Right v
   Nothing -> Left $ "Could not parse: " ++ s
-  
+
+
+seriesNameToId :: String -> SeriesID
+seriesNameToId = crc32 . C8.pack
+
+
 --
 -- SimpleReport
 -- /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
@@ -83,15 +90,15 @@ verboseReadEither s = case readMaybe s of
 
 dataPointParams :: RqData (String, String, String, String)
 dataPointParams = do
-  tsname <- look "tsname"
+  seriesName <- look "tsname"
   timestamp <- look "t_sec"
   value <- look "value"
   rid <- look "rid"
-  return (tsname, timestamp, value, rid)
+  return (seriesName, timestamp, value, rid)
 
 parseDataPoint :: (String, String, String, String) -> Either String DataPoint
-parseDataPoint (seriesIdS, timestampS, valueS, ridS) = do
-  seriesId <- return $ crc32 . C8.pack $ seriesIdS
+parseDataPoint (seriesName, timestampS, valueS, ridS) = do
+  seriesId <- return $ seriesNameToId seriesName
   unixTime <- verboseReadEither timestampS :: Either String Int
   utcTime <- return $ posixSecondsToUTCTime $ fromIntegral unixTime
   value <- verboseReadEither valueS
@@ -119,20 +126,20 @@ reportPageHtml msg =
 -- /query?tsname=es.mrjon.foo&secs=3600
 -- 
 
-data Query = Query { queryTimeseriesId :: Word32
+data Query = Query { querySeriesId :: SeriesID
                    , queryDurationSec :: Int
                    } deriving (Show)
 
 queryParams :: RqData (String, Maybe String)
 queryParams = do
-  tsname <- look "tsname"
+  seriesName <- look "tsname"
   duration <- optional $ look "secs"
-  return (tsname, duration)
+  return (seriesName, duration)
 
 parseQuery :: (String, Maybe String) -> Either String Query
-parseQuery (tsname, mduration) = do
+parseQuery (seriesName, mduration) = do
   duration <- verboseReadEither (fromMaybe "86400" mduration)
-  Right $ Query (crc32 . C8.pack $ tsname) duration
+  Right $ Query (seriesNameToId seriesName) duration
 
 queryPage :: MySQL.Connection -> ServerPartT IO Response
 queryPage conn = do
