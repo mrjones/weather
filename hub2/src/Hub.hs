@@ -129,7 +129,6 @@ queryParams = do
   duration <- optional $ look "secs"
   return (tsname, duration)
 
--- always succeeds, for now
 parseQuery :: (String, Maybe String) -> Either String Query
 parseQuery (tsname, mduration) = do
   duration <- verboseReadEither (fromMaybe "86400" mduration)
