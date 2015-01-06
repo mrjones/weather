@@ -60,6 +60,10 @@ dbConnect username password hostname = MySQL.connect defaultConnectInfo
     , connectHost = hostname
     }
 
+storeDataPoint :: MySQL.Connection -> DataPoint -> IO Bool
+storeDataPoint conn dp = do
+  fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpTimeseriesId dp, dpTimestamp dp, dpReporterId dp)
+
 --
 -- SimpleReport
 -- /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
@@ -94,10 +98,6 @@ reportPage conn = do
     (Right dp) -> do
       success <- liftIO $ storeDataPoint conn dp
       ok $ toResponse $ reportPageHtml ((show dp) ++ (show success))
-
-storeDataPoint :: MySQL.Connection -> DataPoint -> IO Bool
-storeDataPoint conn dp = do
-  fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpTimeseriesId dp, dpTimestamp dp, dpReporterId dp)
 
 reportPageHtml :: String -> H.Html
 reportPageHtml msg =
