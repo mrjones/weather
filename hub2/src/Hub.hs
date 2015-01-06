@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Monad (msum)
+import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString.Char8 as C8 (pack)
 import Data.Digest.CRC32 (crc32)
 import Data.Time.Clock (UTCTime)
@@ -10,16 +11,22 @@ import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word32)
 import Happstack.Server (badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
+import Database.MySQL.Simple (connectUser, connectPassword, connectDatabase, connectHost, defaultConnectInfo, execute)
+import qualified Database.MySQL.Simple as MySQL (connect, Connection)
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
 import Text.Read (readMaybe)
 
 main :: IO ()
-main = serve $ HubConfig 5999
+main = serve $ HubConfig 5999 "weather" "weather" "localhost"
 
 data HubConfig =
-  HubConfig { hubPort :: Int }
+  HubConfig { hubPort :: Int
+            , hubDbUsername :: String
+            , hubDbPassword :: String
+            , hubDbHostname :: String
+            }
 
 data DataPoint =
   DataPoint { dpTimeseriesId :: Word32
@@ -33,13 +40,25 @@ serve config = do
   let httpConf = nullConf { port = hubPort config }
   socket <- bindPort nullConf { port = hubPort config }
   putStrLn $ "Serving on port: " ++ (show (hubPort config))
-  simpleHTTPWithSocket socket httpConf $ allPages
+  simpleHTTPWithSocket socket httpConf $ allPages config
 
-
-allPages :: ServerPartT IO Response
-allPages =
-  msum [ dir "report" $ reportPage
+allPages :: HubConfig -> ServerPartT IO Response
+allPages config = do
+  conn <- liftIO $ dbConnect (hubDbUsername config) (hubDbPassword config) (hubDbHostname config)
+  msum [ dir "report" $ reportPage conn
        , helloPage ]
+
+--
+-- Database
+--
+
+dbConnect :: String -> String -> String -> IO MySQL.Connection
+dbConnect username password hostname = MySQL.connect defaultConnectInfo
+    { connectUser = username
+    , connectPassword = password
+    , connectDatabase = "weather"
+    , connectHost = hostname
+    }
 
 --
 -- SimpleReport
@@ -67,12 +86,18 @@ parseDataPoint (seriesIdS, timestampS, valueS, ridS) = do
   rid <- verboseReadEither ridS
   return $ DataPoint seriesId utcTime value rid
 
-reportPage :: ServerPartT IO Response
-reportPage = do
-  ts <- getDataFn (dataPointParams `checkRq` parseDataPoint)
-  case ts of
+reportPage :: MySQL.Connection -> ServerPartT IO Response
+reportPage conn = do
+  mdp <- getDataFn (dataPointParams `checkRq` parseDataPoint)
+  case mdp of
     (Left e) -> badRequest $ toResponse $ reportPageHtml $ unlines e
-    (Right (s)) -> ok $ toResponse $ reportPageHtml (show s)
+    (Right dp) -> do
+      success <- liftIO $ storeDataPoint conn dp
+      ok $ toResponse $ reportPageHtml ((show dp) ++ (show success))
+
+storeDataPoint :: MySQL.Connection -> DataPoint -> IO Bool
+storeDataPoint conn dp = do
+  fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpTimeseriesId dp, dpTimestamp dp, dpReporterId dp)
 
 reportPageHtml :: String -> H.Html
 reportPageHtml msg =
