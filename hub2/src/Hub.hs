@@ -14,7 +14,9 @@ import Data.Word (Word32)
 import Happstack.Server (badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
 import Database.MySQL.Simple (connectUser, connectPassword, connectDatabase, connectHost, defaultConnectInfo, execute)
-import qualified Database.MySQL.Simple as MySQL (connect, Connection)
+import qualified Database.MySQL.Simple as MySQL (connect, Connection, query)
+import Database.MySQL.Simple.QueryResults (QueryResults, convertResults)
+import Database.MySQL.Simple.Result (convert)
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
@@ -23,21 +25,23 @@ import Text.Read (readMaybe)
 main :: IO ()
 main = serve $ HubConfig 5999 "weather" "weather" "localhost"
 
-type SeriesID = Word32
+type SeriesID = Int
 
-data HubConfig =
-  HubConfig { hubPort :: Int
-            , hubDbUsername :: String
-            , hubDbPassword :: String
-            , hubDbHostname :: String
-            }
+data HubConfig = HubConfig { hubPort :: Int
+                           , hubDbUsername :: String
+                           , hubDbPassword :: String
+                           , hubDbHostname :: String
+                           }
 
-data DataPoint =
-  DataPoint { dpSeriesId :: SeriesID
-            , dpTimestamp :: UTCTime
-            , dpValue :: Int
-            , dpReporterId :: Int
-            } deriving (Show)
+data Point = Point { dpValue :: Int
+                   , dpSeriesId :: SeriesID
+                   , dpTimestamp :: UTCTime
+                   , dpReporterId :: Int
+                   } deriving (Show)
+
+data Query = Query { querySeriesId :: SeriesID
+                   , queryDurationSec :: Int
+                   } deriving (Show)
 
 serve :: HubConfig -> IO ()
 serve config = do
@@ -65,9 +69,17 @@ dbConnect username password hostname = MySQL.connect defaultConnectInfo
     , connectHost = hostname
     }
 
-storeDataPoint :: MySQL.Connection -> DataPoint -> IO Bool
-storeDataPoint conn dp = do
+storePoint :: MySQL.Connection -> Point -> IO Bool
+storePoint conn dp = do
   fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpSeriesId dp, dpTimestamp dp, dpReporterId dp)
+
+instance QueryResults Point where
+  convertResults [f_val, f_sid, f_ts, f_rid] [v_val, v_sid, v_ts, v_rid] =
+    Point (convert f_val v_val) (convert f_sid v_sid) (convert f_ts v_ts) (convert f_rid v_rid)
+
+queryPoints :: MySQL.Connection -> Query -> IO [Point]
+queryPoints conn q =
+  MySQL.query conn "SELECT value, series_id, timestamp, reporter_id FROM history WHERE series_id = (?) AND timestamp > (?)" (querySeriesId q, queryDurationSec q)
 
 --
 -- Misc/common
@@ -80,8 +92,7 @@ verboseReadEither s = case readMaybe s of
 
 
 seriesNameToId :: String -> SeriesID
-seriesNameToId = crc32 . C8.pack
-
+seriesNameToId = fromIntegral . crc32 . C8.pack
 
 --
 -- SimpleReport
@@ -96,22 +107,22 @@ dataPointParams = do
   rid <- look "rid"
   return (seriesName, timestamp, value, rid)
 
-parseDataPoint :: (String, String, String, String) -> Either String DataPoint
-parseDataPoint (seriesName, timestampS, valueS, ridS) = do
+parsePoint :: (String, String, String, String) -> Either String Point
+parsePoint (seriesName, timestampS, valueS, ridS) = do
   seriesId <- return $ seriesNameToId seriesName
   unixTime <- verboseReadEither timestampS :: Either String Int
   utcTime <- return $ posixSecondsToUTCTime $ fromIntegral unixTime
   value <- verboseReadEither valueS
   rid <- verboseReadEither ridS
-  return $ DataPoint seriesId utcTime value rid
+  return $ Point value seriesId utcTime rid
 
 reportPage :: MySQL.Connection -> ServerPartT IO Response
 reportPage conn = do
-  mdp <- getDataFn (dataPointParams `checkRq` parseDataPoint)
+  mdp <- getDataFn (dataPointParams `checkRq` parsePoint)
   case mdp of
     (Left e) -> badRequest $ toResponse $ reportPageHtml $ unlines e
     (Right dp) -> do
-      success <- liftIO $ storeDataPoint conn dp
+      success <- liftIO $ storePoint conn dp
       ok $ toResponse $ reportPageHtml ((show dp) ++ (show success))
 
 reportPageHtml :: String -> H.Html
@@ -125,10 +136,6 @@ reportPageHtml msg =
 -- Query
 -- /query?tsname=es.mrjon.foo&secs=3600
 -- 
-
-data Query = Query { querySeriesId :: SeriesID
-                   , queryDurationSec :: Int
-                   } deriving (Show)
 
 queryParams :: RqData (String, Maybe String)
 queryParams = do
@@ -146,7 +153,11 @@ queryPage conn = do
   equery <- getDataFn $ queryParams `checkRq` parseQuery
   case equery of
     Left e -> badRequest $ toResponse $ reportPageHtml $ unlines e
-    Right query -> ok $ toResponse $ reportPageHtml $ show query
+    Right query -> do
+      points <- liftIO $ queryPoints conn query
+      ok $ toResponse $ reportPageHtml $ ((show query) ++ " -> " ++ (show points))
+
+
 
 --   
 --
