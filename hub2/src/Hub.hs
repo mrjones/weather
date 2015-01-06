@@ -2,12 +2,14 @@
 
 module Main where
 
+import Control.Applicative (optional)
 import Control.Monad (msum)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString.Char8 as C8 (pack)
 import Data.Digest.CRC32 (crc32)
 import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
+import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 import Happstack.Server (badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
@@ -46,6 +48,7 @@ allPages :: HubConfig -> ServerPartT IO Response
 allPages config = do
   conn <- liftIO $ dbConnect (hubDbUsername config) (hubDbPassword config) (hubDbHostname config)
   msum [ dir "report" $ reportPage conn
+       , dir "query" $ queryPage conn
        , helloPage ]
 
 --
@@ -65,13 +68,18 @@ storeDataPoint conn dp = do
   fmap ((==) 1) $ execute conn "INSERT INTO history (value, series_id, timestamp, reporter_id) VALUES (?, ?, ?, ?)" (dpValue dp, dpTimeseriesId dp, dpTimestamp dp, dpReporterId dp)
 
 --
--- SimpleReport
--- /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
+-- Misc/common
 --
+
 verboseReadEither :: Read a => String -> Either String a
 verboseReadEither s = case readMaybe s of
   Just v -> Right v
   Nothing -> Left $ "Could not parse: " ++ s
+  
+--
+-- SimpleReport
+-- /simplereport?t_sec=1234567890&v=42&tsname=es.mrjon.metric&rid=2222
+--
 
 dataPointParams :: RqData (String, String, String, String)
 dataPointParams = do
@@ -106,8 +114,35 @@ reportPageHtml msg =
       H.title "Data reported"
     H.body $ do
       H.div ! A.id "body" $ H.toHtml ("Message: " ++ msg)
-
 --
+-- Query
+-- /query?tsname=es.mrjon.foo&secs=3600
+-- 
+
+data Query = Query { queryTimeseriesId :: Word32
+                   , queryDurationSec :: Int
+                   } deriving (Show)
+
+queryParams :: RqData (String, Maybe String)
+queryParams = do
+  tsname <- look "tsname"
+  duration <- optional $ look "secs"
+  return (tsname, duration)
+
+-- always succeeds, for now
+parseQuery :: (String, Maybe String) -> Either String Query
+parseQuery (tsname, mduration) = do
+  duration <- verboseReadEither (fromMaybe "86400" mduration)
+  Right $ Query (crc32 . C8.pack $ tsname) duration
+
+queryPage :: MySQL.Connection -> ServerPartT IO Response
+queryPage conn = do
+  equery <- getDataFn $ queryParams `checkRq` parseQuery
+  case equery of
+    Left e -> badRequest $ toResponse $ reportPageHtml $ unlines e
+    Right query -> ok $ toResponse $ reportPageHtml $ show query
+
+--   
 --
 --
 
