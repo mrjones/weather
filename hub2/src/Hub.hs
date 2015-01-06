@@ -3,8 +3,11 @@
 module Main where
 
 import Control.Monad (msum)
+import qualified Data.ByteString.Char8 as C8 (pack)
+import Data.Digest.CRC32 (crc32)
 import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
+import Data.Word (Word32)
 import Happstack.Server (badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
 import Text.Blaze.Html5 ((!))
@@ -19,9 +22,8 @@ data HubConfig =
   HubConfig { hubPort :: Int }
 
 data DataPoint =
-  DataPoint { dpTimeseriesId :: Int
+  DataPoint { dpTimeseriesId :: Word32
             , dpTimestamp :: UTCTime
---            , dpTimestamp :: Int
             , dpValue :: Int
             , dpReporterId :: Int
             } deriving (Show)
@@ -58,7 +60,7 @@ dataPointParams = do
 
 parseDataPoint :: (String, String, String, String) -> Either String DataPoint
 parseDataPoint (seriesIdS, timestampS, valueS, ridS) = do
-  seriesId <- verboseReadEither seriesIdS
+  seriesId <- return $ crc32 . C8.pack $ seriesIdS
   unixTime <- verboseReadEither timestampS :: Either String Int
   utcTime <- return $ posixSecondsToUTCTime $ fromIntegral unixTime
   value <- verboseReadEither valueS

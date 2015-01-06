@@ -20,6 +20,8 @@ executable hub
   build-depends:       base ==4.6.*,
                        blaze-html,
                        blaze-markup,
+                       bytestring,
+                       digest,
                        happstack,
                        happstack-server,
                        time
