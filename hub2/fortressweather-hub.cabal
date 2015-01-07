@@ -17,7 +17,8 @@ cabal-version:       >=1.10
 
 executable hub
   main-is:             Hub.hs
-  build-depends:       base,
+  build-depends:       aeson,
+                       base,
                        blaze-html,
                        blaze-markup,
                        bytestring,

@@ -6,9 +6,12 @@ import Control.Applicative (optional)
 import Control.Monad (msum)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.ByteString.Char8 as C8 (pack)
+import qualified Data.ByteString.Lazy.Char8 as LC8 (unpack)
+import Data.Aeson (toJSON, ToJSON, (.=))
+import qualified Data.Aeson as JSON (encode, object)
 import Data.Digest.CRC32 (crc32)
 import Data.Time.Clock (UTCTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
 import Happstack.Server (badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, ServerPartT, simpleHTTPWithSocket)
@@ -80,6 +83,18 @@ instance QueryResults Point where
 queryPoints :: MySQL.Connection -> Query -> IO [Point]
 queryPoints conn q =
   MySQL.query conn "SELECT value, series_id, timestamp, reporter_id FROM history WHERE series_id = (?) AND timestamp > DATE_SUB(CURDATE(), INTERVAL (?) SECOND)" (querySeriesId q, queryDurationSec q)
+
+--
+-- JSON
+--
+
+toUnix :: UTCTime -> Int
+toUnix = round . utcTimeToPOSIXSeconds
+
+instance ToJSON Point where
+  toJSON p = JSON.object [ "ts" .= (toUnix (dpTimestamp p))
+                         , "val" .= (dpValue p)
+                         ]
 
 --
 -- Misc/common
@@ -155,9 +170,7 @@ queryPage conn = do
     Left e -> badRequest $ toResponse $ reportPageHtml $ unlines e
     Right query -> do
       points <- liftIO $ queryPoints conn query
-      ok $ toResponse $ reportPageHtml $ ((show query) ++ " -> " ++ (show points))
-
-
+      ok $ toResponse $ (LC8.unpack . JSON.encode) points
 
 --   
 --
@@ -175,3 +188,4 @@ helloHtml =
       H.title "Hello, world!"
     H.body $ do
       H.div ! A.id "body" $ "Hello, world!"
+  
