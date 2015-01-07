@@ -14,7 +14,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Data.Maybe (fromMaybe)
 import Data.Word (Word32)
-import Happstack.Server (badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, ServerPartT, simpleHTTPWithSocket)
+import Happstack.Server (asContentType, badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, serveFile, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
 import Database.MySQL.Simple (connectUser, connectPassword, connectDatabase, connectHost, defaultConnectInfo, execute)
 import qualified Database.MySQL.Simple as MySQL (connect, Connection, query)
@@ -54,23 +54,32 @@ serve config = do
   simpleHTTPWithSocket socket httpConf $ allPages config
 
 allPages :: HubConfig -> ServerPartT IO Response
-allPages config = do
-  conn <- liftIO $ dbConnect (hubDbUsername config) (hubDbPassword config) (hubDbHostname config)
-  msum [ dir "report" $ reportPage conn
-       , dir "query" $ queryPage conn
-       , helloPage ]
+allPages config =
+  msum [ dir "js" $ serveFile (asContentType "text/javascript") "static/app.js"
+       , dir "report" $ reportPage config
+       , dir "query" $ queryPage config
+       , dashboardPage
+       ]
+
+dbPages :: MySQL.Connection -> ServerPartT IO Response
+dbPages conn =
+  msum [ ]
 
 --
 -- Database
 --
 
-dbConnect :: String -> String -> String -> IO MySQL.Connection
-dbConnect username password hostname = MySQL.connect defaultConnectInfo
-    { connectUser = username
-    , connectPassword = password
+dbConnect :: HubConfig -> IO MySQL.Connection
+dbConnect conf = do
+  putStrLn "DBCONNECT"
+  MySQL.connect defaultConnectInfo
+    { connectUser = hubDbUsername conf
+    , connectPassword = hubDbPassword conf
     , connectDatabase = "weather"
-    , connectHost = hostname
+    , connectHost = hubDbHostname conf
     }
+
+
 
 storePoint :: MySQL.Connection -> Point -> IO Bool
 storePoint conn dp = do
@@ -94,6 +103,7 @@ toUnix = round . utcTimeToPOSIXSeconds
 instance ToJSON Point where
   toJSON p = JSON.object [ "ts" .= (toUnix (dpTimestamp p))
                          , "val" .= (dpValue p)
+                         , "rid" .= (dpReporterId p)
                          ]
 
 --
@@ -131,12 +141,13 @@ parsePoint (seriesName, timestampS, valueS, ridS) = do
   rid <- verboseReadEither ridS
   return $ Point value seriesId utcTime rid
 
-reportPage :: MySQL.Connection -> ServerPartT IO Response
-reportPage conn = do
+reportPage :: HubConfig -> ServerPartT IO Response
+reportPage conf = do
   mdp <- getDataFn (dataPointParams `checkRq` parsePoint)
   case mdp of
     (Left e) -> badRequest $ toResponse $ reportPageHtml $ unlines e
     (Right dp) -> do
+      conn <- liftIO $ dbConnect conf
       success <- liftIO $ storePoint conn dp
       ok $ toResponse $ reportPageHtml ((show dp) ++ (show success))
 
@@ -163,29 +174,35 @@ parseQuery (seriesName, mduration) = do
   duration <- verboseReadEither (fromMaybe "86400" mduration)
   Right $ Query (seriesNameToId seriesName) duration
 
-queryPage :: MySQL.Connection -> ServerPartT IO Response
-queryPage conn = do
+queryPage :: HubConfig -> ServerPartT IO Response
+queryPage conf = do
   equery <- getDataFn $ queryParams `checkRq` parseQuery
   case equery of
     Left e -> badRequest $ toResponse $ reportPageHtml $ unlines e
     Right query -> do
+      conn <- liftIO $ dbConnect conf
       points <- liftIO $ queryPoints conn query
       ok $ toResponse $ (LC8.unpack . JSON.encode) points
 
---   
+
 --
+-- Dashboard
 --
 
-helloPage :: ServerPartT IO Response
-helloPage = do
-  ok $ toResponse $ helloHtml
+dashboardPage :: ServerPartT IO Response
+dashboardPage = ok $ toResponse $ dashboardHtml
 
+importJs :: H.AttributeValue -> H.Html
+importJs url = H.script ! A.type_ "text/javascript" ! A.src url $ ""
 
-helloHtml :: H.Html
-helloHtml =
+dashboardHtml :: H.Html
+dashboardHtml =
   H.html $ do
     H.head $ do
-      H.title "Hello, world!"
-    H.body $ do
-      H.div ! A.id "body" $ "Hello, world!"
-  
+      H.title "Fortress Weather"
+      importJs "//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"
+      importJs "https://www.google.com/jsapi"
+      importJs "/js/app.js"
+    H.body ! A.onload "init()" $ do
+      H.div ! A.id "temps_div" $ ""
+      H.div ! A.id "humid_div" $ ""
