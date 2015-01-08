@@ -20,13 +20,45 @@ import Database.MySQL.Simple (connectUser, connectPassword, connectDatabase, con
 import qualified Database.MySQL.Simple as MySQL (connect, Connection, query)
 import Database.MySQL.Simple.QueryResults (QueryResults, convertResults)
 import Database.MySQL.Simple.Result (convert)
+import System.Console.GetOpt (ArgDescr(..), ArgOrder(..), getOpt, OptDescr(..), usageInfo)
+import System.Environment (getArgs)
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
 import Text.Read (readMaybe)
 
 main :: IO ()
-main = serve $ HubConfig 5999 "weather" "weather" "localhost"
+main = do
+  argv <- getArgs
+  flags <- parseFlags argv
+  putStrLn $ show flags
+  serve $ HubConfig 5999 "weather" "weather" "localhost"
+
+data Flag = DBUsername String
+          | DBPassword String
+          | DBHostname String
+          | Port Int deriving (Show)
+
+flags :: [OptDescr Flag]
+flags =
+  [ Option ['u'] ["dbuser"] (ReqArg dbUserFlag "USER") "MySQL user"
+  , Option ['w'] ["dbpass"] (ReqArg dbPassFlag "PASS") "MySQL password"
+  , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL host"
+  , Option ['p'] ["port"] (ReqArg portFlag "PORT") "Port"
+  ]
+
+dbUserFlag, dbPassFlag, dbHostFlag, portFlag :: String -> Flag
+dbUserFlag = DBUsername
+dbPassFlag = DBPassword
+dbHostFlag = DBHostname
+portFlag ms = Port $ fromMaybe 5999 $ readMaybe ms
+
+parseFlags :: [String] -> IO [Flag]
+parseFlags argv = 
+  case getOpt Permute flags argv of
+    (f,_,[]  ) -> return f
+    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header flags))
+  where header = "Usage: hub [OPTION...]"
 
 type SeriesID = Int
 
