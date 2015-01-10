@@ -13,12 +13,11 @@ import Data.Digest.CRC32 (crc32)
 import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Data.Maybe (fromMaybe)
-import Data.Word (Word32)
 import Happstack.Server (asContentType, badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, serveFile, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
 import Database.MySQL.Simple (connectUser, connectPassword, connectDatabase, connectHost, defaultConnectInfo, execute)
 import qualified Database.MySQL.Simple as MySQL (connect, Connection, query)
-import Database.MySQL.Simple.QueryResults (QueryResults, convertResults)
+import Database.MySQL.Simple.QueryResults (QueryResults, convertError, convertResults)
 import Database.MySQL.Simple.Result (convert)
 import System.Console.GetOpt (ArgDescr(..), ArgOrder(..), getOpt, OptDescr(..), usageInfo)
 import System.Environment (getArgs)
@@ -39,8 +38,8 @@ data Flag = DBUsername String
           | DBHostname String
           | Port Int deriving (Show)
 
-flags :: [OptDescr Flag]
-flags =
+flagDefs :: [OptDescr Flag]
+flagDefs =
   [ Option ['u'] ["dbuser"] (ReqArg dbUserFlag "USER") "MySQL user"
   , Option ['w'] ["dbpass"] (ReqArg dbPassFlag "PASS") "MySQL password"
   , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL host"
@@ -55,9 +54,9 @@ portFlag ms = Port $ fromMaybe 5999 $ readMaybe ms
 
 parseFlags :: [String] -> IO [Flag]
 parseFlags argv = 
-  case getOpt Permute flags argv of
+  case getOpt Permute flagDefs argv of
     (f,_,[]  ) -> return f
-    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header flags))
+    (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header flagDefs))
   where header = "Usage: hub [OPTION...]"
 
 configFromFlags :: [Flag] -> HubConfig
@@ -132,6 +131,7 @@ storePoint conn dp = do
 instance QueryResults Point where
   convertResults [f_val, f_sid, f_ts, f_rid] [v_val, v_sid, v_ts, v_rid] =
     Point (convert f_val v_val) (convert f_sid v_sid) (convert f_ts v_ts) (convert f_rid v_rid)
+  convertResults fs vs = convertError fs vs 4
 
 queryPoints :: MySQL.Connection -> Query -> IO [Point]
 queryPoints conn q =
