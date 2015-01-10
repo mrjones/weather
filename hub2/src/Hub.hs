@@ -36,7 +36,8 @@ main = do
 data Flag = DBUsername String
           | DBPassword String
           | DBHostname String
-          | Port Int deriving (Show)
+          | Port Int
+          | MkDb Bool deriving (Show)
 
 flagDefs :: [OptDescr Flag]
 flagDefs =
@@ -44,13 +45,15 @@ flagDefs =
   , Option ['w'] ["dbpass"] (ReqArg dbPassFlag "PASS") "MySQL password"
   , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL host"
   , Option ['p'] ["port"] (ReqArg portFlag "PORT") "Port"
+  , Option ['m'] ["mkdb"] (ReqArg portFlag "VAL") "Create the DB?"
   ]
 
-dbUserFlag, dbPassFlag, dbHostFlag, portFlag :: String -> Flag
+dbUserFlag, dbPassFlag, dbHostFlag, portFlag, mkDbFlag :: String -> Flag
 dbUserFlag = DBUsername
 dbPassFlag = DBPassword
 dbHostFlag = DBHostname
 portFlag ms = Port $ fromMaybe 5999 $ readMaybe ms
+mkDbFlag ms = MkDb $ fromMaybe True $ readMaybe ms
 
 parseFlags :: [String] -> IO [Flag]
 parseFlags argv = 
@@ -66,10 +69,11 @@ configFromFlags fs =
             DBPassword p -> c { hubDbPassword = p }
             DBHostname h -> c { hubDbHostname = h }
             Port p -> c { hubPort = p }
+            MkDb m -> c { hubCreateDatabase = m }
         ) defaultConfig fs
 
 defaultConfig :: HubConfig
-defaultConfig = HubConfig 5999 "weather" "weather" "localhost"
+defaultConfig = HubConfig 5999 "weather" "weather" "localhost" False
 
 type SeriesID = Int
 
@@ -77,6 +81,7 @@ data HubConfig = HubConfig { hubPort :: Int
                            , hubDbUsername :: String
                            , hubDbPassword :: String
                            , hubDbHostname :: String
+                           , hubCreateDatabase :: Bool
                            }
 
 data Point = Point { dpValue :: Int
@@ -91,6 +96,9 @@ data Query = Query { querySeriesId :: SeriesID
 
 serve :: HubConfig -> IO ()
 serve config = do
+  if hubCreateDatabase config
+     then mkDatabase config
+     else putStrLn "Not creating DB"
   let httpConf = nullConf { port = hubPort config }
   socket <- bindPort nullConf { port = hubPort config }
   putStrLn $ "Serving on port: " ++ (show (hubPort config))
@@ -122,7 +130,16 @@ dbConnect conf = do
     , connectHost = hubDbHostname conf
     }
 
-
+mkDatabase :: HubConfig -> IO ()
+mkDatabase config = do
+  conn <- dbConnect config
+  _ <- execute conn "CREATE TABLE history (\
+                    \ value BIGINT,\
+                    \ series_id BIGINT,\
+                    \ timestamp DATETIME,\
+                    \ reporter_id INT,\
+                    \ PRIMARY KEY(series_id, timestamp, reporter))" ()
+  return ()
 
 storePoint :: MySQL.Connection -> Point -> IO Bool
 storePoint conn dp = do
