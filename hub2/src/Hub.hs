@@ -32,7 +32,7 @@ main = do
   argv <- getArgs
   flags <- parseFlags argv
   putStrLn $ show flags
-  serve $ HubConfig 5999 "weather" "weather" "localhost"
+  serve $ configFromFlags flags
 
 data Flag = DBUsername String
           | DBPassword String
@@ -59,6 +59,18 @@ parseFlags argv =
     (f,_,[]  ) -> return f
     (_,_,errs) -> ioError (userError (concat errs ++ usageInfo header flags))
   where header = "Usage: hub [OPTION...]"
+
+configFromFlags :: [Flag] -> HubConfig
+configFromFlags fs =
+  foldr (\f c -> case f of
+            DBUsername u -> c { hubDbUsername = u }
+            DBPassword p -> c { hubDbPassword = p }
+            DBHostname h -> c { hubDbHostname = h }
+            Port p -> c { hubPort = p }
+        ) defaultConfig fs
+
+defaultConfig :: HubConfig
+defaultConfig = HubConfig 5999 "weather" "weather" "localhost"
 
 type SeriesID = Int
 
