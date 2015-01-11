@@ -39,5 +39,8 @@ function renderTimeseries(seriesName, targetDivName) {
       var chart = new google.visualization.LineChart(
           document.getElementById(targetDivName));
       chart.draw(table, options);
+
+      $("#debug").append("<div>DBConnect: " + data.connTimeUsec +
+                        " DBQuery: " + data.queryTimeUsec + "</div>");
   });
 }

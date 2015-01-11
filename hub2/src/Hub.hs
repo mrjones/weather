@@ -282,3 +282,4 @@ dashboardHtml =
     H.body ! A.onload "init()" $ do
       H.div ! A.id "temps_div" $ ""
       H.div ! A.id "humid_div" $ ""
+      H.div ! A.id "debug" $ ""
