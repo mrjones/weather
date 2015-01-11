@@ -17,7 +17,6 @@ function renderTimeseries(seriesName, targetDivName) {
       var allRids = [];
 
       for (var i = 0; i < data.length; i++) {
-          alert(data[i]);
           var rid = data[i].rid;
           if (!ridToColumn[rid]) {
               ridToColumn[rid] = 1 + allRids.length;

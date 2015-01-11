@@ -33,11 +33,11 @@ main = do
   putStrLn $ show flags
   serve $ configFromFlags flags
 
-data Flag = DBUsername String
-          | DBPassword String
-          | DBHostname String
-          | Port Int
-          | MkDb Bool deriving (Show)
+data Flag = DBUsernameFlag String
+          | DBPasswordFlag String
+          | DBHostnameFlag String
+          | PortFlag Int
+          | MakeDatabaseFlag deriving (Show)
 
 flagDefs :: [OptDescr Flag]
 flagDefs =
@@ -45,15 +45,14 @@ flagDefs =
   , Option ['w'] ["dbpass"] (ReqArg dbPassFlag "PASS") "MySQL password"
   , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL host"
   , Option ['p'] ["port"] (ReqArg portFlag "PORT") "Port"
-  , Option ['m'] ["mkdb"] (ReqArg portFlag "VAL") "Create the DB?"
+  , Option ['m'] ["mkdb"] (NoArg MakeDatabaseFlag) "Create the DB?"
   ]
 
-dbUserFlag, dbPassFlag, dbHostFlag, portFlag, mkDbFlag :: String -> Flag
-dbUserFlag = DBUsername
-dbPassFlag = DBPassword
-dbHostFlag = DBHostname
-portFlag ms = Port $ fromMaybe 5999 $ readMaybe ms
-mkDbFlag ms = MkDb $ fromMaybe True $ readMaybe ms
+dbUserFlag, dbPassFlag, dbHostFlag, portFlag :: String -> Flag
+dbUserFlag = DBUsernameFlag
+dbPassFlag = DBPasswordFlag
+dbHostFlag = DBHostnameFlag
+portFlag ms = PortFlag $ fromMaybe 5999 $ readMaybe ms
 
 parseFlags :: [String] -> IO [Flag]
 parseFlags argv = 
@@ -65,11 +64,11 @@ parseFlags argv =
 configFromFlags :: [Flag] -> HubConfig
 configFromFlags fs =
   foldr (\f c -> case f of
-            DBUsername u -> c { hubDbUsername = u }
-            DBPassword p -> c { hubDbPassword = p }
-            DBHostname h -> c { hubDbHostname = h }
-            Port p -> c { hubPort = p }
-            MkDb m -> c { hubCreateDatabase = m }
+            DBUsernameFlag u -> c { hubDbUsername = u }
+            DBPasswordFlag p -> c { hubDbPassword = p }
+            DBHostnameFlag h -> c { hubDbHostname = h }
+            PortFlag p -> c { hubPort = p }
+            MakeDatabaseFlag -> c { hubCreateDatabase = True }
         ) defaultConfig fs
 
 defaultConfig :: HubConfig
@@ -138,7 +137,7 @@ mkDatabase config = do
                     \ series_id BIGINT,\
                     \ timestamp DATETIME,\
                     \ reporter_id INT,\
-                    \ PRIMARY KEY(series_id, timestamp, reporter))" ()
+                    \ PRIMARY KEY(series_id, timestamp, reporter_id))" ()
   return ()
 
 storePoint :: MySQL.Connection -> Point -> IO Bool
@@ -189,7 +188,7 @@ dataPointParams :: RqData (String, String, String, String)
 dataPointParams = do
   seriesName <- look "tsname"
   timestamp <- look "t_sec"
-  value <- look "value"
+  value <- look "v"
   rid <- look "rid"
   return (seriesName, timestamp, value, rid)
 
