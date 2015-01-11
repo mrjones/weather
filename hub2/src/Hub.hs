@@ -41,11 +41,11 @@ data Flag = DBUsernameFlag String
 
 flagDefs :: [OptDescr Flag]
 flagDefs =
-  [ Option ['u'] ["dbuser"] (ReqArg dbUserFlag "USER") "MySQL user"
+  [ Option ['u'] ["dbuser"] (ReqArg dbUserFlag "USER") "MySQL username"
   , Option ['w'] ["dbpass"] (ReqArg dbPassFlag "PASS") "MySQL password"
-  , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL host"
-  , Option ['p'] ["port"] (ReqArg portFlag "PORT") "Port"
-  , Option ['m'] ["mkdb"] (NoArg MakeDatabaseFlag) "Create the DB?"
+  , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL hostname"
+  , Option ['p'] ["port"] (ReqArg portFlag "PORT") "HTTP port"
+  , Option ['m'] ["mkdb"] (NoArg MakeDatabaseFlag) "Create the DB"
   ]
 
 dbUserFlag, dbPassFlag, dbHostFlag, portFlag :: String -> Flag
