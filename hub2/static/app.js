@@ -41,6 +41,6 @@ function renderTimeseries(seriesName, targetDivName) {
       chart.draw(table, options);
 
       $("#debug").append("<div>DBConnect: " + data.connTimeUsec +
-                        " DBQuery: " + data.queryTimeUsec + "</div>");
+                        "us DBQuery: " + data.queryTimeUsec + "us</div>");
   });
 }
