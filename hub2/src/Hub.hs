@@ -10,7 +10,7 @@ import qualified Data.ByteString.Lazy.Char8 as LC8 (unpack)
 import Data.Aeson (toJSON, ToJSON, (.=))
 import qualified Data.Aeson as JSON (encode, object)
 import Data.Digest.CRC32 (crc32)
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (diffUTCTime, getCurrentTime, NominalDiffTime, UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Data.Maybe (fromMaybe)
 import Happstack.Server (asContentType, badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, serveFile, ServerPartT, simpleHTTPWithSocket)
@@ -93,6 +93,12 @@ data Query = Query { querySeriesId :: SeriesID
                    , queryDurationSec :: Int
                    } deriving (Show)
 
+data QueryResponse =
+  QueryResponse { responsePoints :: [Point]
+                , responseConnectTimeUsec :: Int
+                , responseQueryTimeUsec :: Int
+                }
+
 serve :: HubConfig -> IO ()
 serve config = do
   if hubCreateDatabase config
@@ -110,10 +116,6 @@ allPages config =
        , dir "query" $ queryPage config
        , dashboardPage
        ]
-
-dbPages :: MySQL.Connection -> ServerPartT IO Response
-dbPages conn =
-  msum [ ]
 
 --
 -- Database
@@ -164,6 +166,12 @@ instance ToJSON Point where
   toJSON p = JSON.object [ "ts" .= (toUnix (dpTimestamp p))
                          , "val" .= (dpValue p)
                          , "rid" .= (dpReporterId p)
+                         ]
+
+instance ToJSON QueryResponse where
+  toJSON r = JSON.object [ "points" .= (responsePoints r)
+                         , "connTimeUsec" .= (responseConnectTimeUsec r)
+                         , "queryTimeUsec" .= (responseQueryTimeUsec r)
                          ]
 
 --
@@ -240,9 +248,16 @@ queryPage conf = do
   case equery of
     Left e -> badRequest $ toResponse $ reportPageHtml $ unlines e
     Right query -> do
+      timeA <- liftIO $ getCurrentTime
       conn <- liftIO $ dbConnect conf
+      timeB <- liftIO $ getCurrentTime
       points <- liftIO $ queryPoints conn query
-      ok $ toResponse $ (LC8.unpack . JSON.encode) points
+      timeC <- liftIO $ getCurrentTime
+      ok $ toResponse $ (LC8.unpack . JSON.encode) $
+        QueryResponse points (toUsec (diffUTCTime timeB timeA)) (toUsec (diffUTCTime timeC timeB))
+
+toUsec :: NominalDiffTime -> Int
+toUsec dt = floor (1000 * 1000 * (realToFrac dt :: Double))
 
 
 --
