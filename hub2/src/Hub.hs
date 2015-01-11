@@ -28,9 +28,10 @@ import Text.Read (readMaybe)
 
 main :: IO ()
 main = do
+  putStrLn "-----"
   argv <- getArgs
   flags <- parseFlags argv
-  putStrLn $ show flags
+  putStrLn $ "Flags: " ++ show flags
   serve $ configFromFlags flags
 
 data Flag = DBUsernameFlag String

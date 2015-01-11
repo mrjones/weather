@@ -16,24 +16,24 @@ function renderTimeseries(seriesName, targetDivName) {
       var ridToColumn = {};
       var allRids = [];
 
-      for (var i = 0; i < data.length; i++) {
-          var rid = data[i].rid;
+      for (var i = 0; i < data.points.length; i++) {
+          var rid = data.points[i].rid;
           if (!ridToColumn[rid]) {
               ridToColumn[rid] = 1 + allRids.length;
               allRids.push(rid)
           }
       }
 
-      table.addRows(data.length);
+      table.addRows(data.points.length);
       table.addColumn('datetime', 'Time');
       for (var i = 0; i < allRids.length; i++) {
           table.addColumn('number', 'Reporter ' + allRids[i]);
       }
 
-      for (var i = 0; i < data.length; i++) {
-          table.setCell(i, 0, new Date(1000 * data[i].ts));
+      for (var i = 0; i < data.points.length; i++) {
+          table.setCell(i, 0, new Date(1000 * data.points[i].ts));
           table.setCell(
-          i, ridToColumn[data[i].rid], (1.0 * data[i].val) / 1000);
+          i, ridToColumn[data.points[i].rid], (1.0 * data.points[i].val) / 1000);
       }
 
       var chart = new google.visualization.LineChart(
