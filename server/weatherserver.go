@@ -33,9 +33,9 @@ func init() {
 	http.HandleFunc("/statusz", server.handleStatus)
 
 	// V2 (in progress) handlers
-	http.HandleFunc("/v2/simplereport", server.handleSimpleReport)
-	http.HandleFunc("/v2/dashboard", server.handleDashboardV2)
-	http.HandleFunc("/v2/query", server.handleQuery)
+	http.HandleFunc("/report", server.handleSimpleReport)
+	http.HandleFunc("/", server.handleDashboardV2)
+	http.HandleFunc("/query", server.handleQuery)
 }
 
 type DataPoint struct {
@@ -50,6 +50,8 @@ type DataPoint struct {
 // For JSON
 type JsonDataSeries struct {
 	Points []JsonDataPoint `json:"points"`
+	DbConnectUsec int64 `json:"connTimeUsec"`
+	DbQueryUsec int64 `json:"queryTimeUsec"`
 }
 
 type JsonDataPoint struct {
@@ -170,10 +172,12 @@ func (s *Server) handleQuery(resp http.ResponseWriter, req *http.Request) {
 	}
 	
 	timeseriesName := req.FormValue("tsname")
+	scanStart := time.Now()
 	points, errors := storage.Scan(
 		time.Now().Add(-1 * windowSize),
 		time.Now(),
 		timeseriesName)
+	scanEnd := time.Now()
 
 	series := JsonDataSeries{
 		Points: make([]JsonDataPoint, 0),
@@ -210,6 +214,12 @@ func (s *Server) handleQuery(resp http.ResponseWriter, req *http.Request) {
 			return
 		}
 	} 
+
+	processingEnd := time.Now()
+
+	series.DbConnectUsec = scanEnd.Sub(scanStart).Nanoseconds() / 1000
+	series.DbQueryUsec = processingEnd.Sub(scanEnd).Nanoseconds() / 1000
+	// TODO(mrjones): time json marshalling
 
 	b, err := json.Marshal(series)
 	if err != nil {

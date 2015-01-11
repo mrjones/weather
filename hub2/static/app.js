@@ -38,9 +38,13 @@ function renderTimeseries(seriesName, targetDivName) {
 
       var chart = new google.visualization.LineChart(
           document.getElementById(targetDivName));
+      var renderStart = Date.now();
       chart.draw(table, options);
+      var renderEnd = Date.now();
 
       $("#debug").append("<div>DBConnect: " + data.connTimeUsec +
-                        "us DBQuery: " + data.queryTimeUsec + "us</div>");
+                         "us - DBQuery: " + data.queryTimeUsec +
+                         "us - Render: " + 1000 * (renderEnd - renderStart) +
+                         "us</div>");
   });
 }
