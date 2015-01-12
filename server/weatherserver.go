@@ -36,6 +36,7 @@ func init() {
 	http.HandleFunc("/report", server.handleSimpleReport)
 	http.HandleFunc("/", server.handleDashboardV2)
 	http.HandleFunc("/query", server.handleQuery)
+	http.HandleFunc("/v3", server.handleDashboardV3)
 }
 
 type DataPoint struct {
@@ -141,9 +142,16 @@ func (s *Server) handleSimpleReport(resp http.ResponseWriter, req *http.Request)
 	}
 }
 
-func (s *Server) handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
-//	ctx := appengine.NewContext(req)
+func (s *Server) handleDashboardV3(resp http.ResponseWriter, req *http.Request) {
+	t, err := template.ParseFiles("templates/dashboard_v3.html")
+	if err != nil {
+		onError("parsing template", err, resp)
+	}
 
+	t.Execute(resp, nil)
+}
+
+func (s *Server) handleDashboardV2(resp http.ResponseWriter, req *http.Request) {
 	t, err := template.ParseFiles("templates/dashboard.html")
 	if err != nil {
 		onError("parsing template", err, resp)

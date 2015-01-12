@@ -9,6 +9,7 @@ function renderTimeseries(seriesName, targetDivName) {
   var params = window.location.search.replace("\?", "&");
 
   $.getJSON( "/query?tsname=" + seriesName + params, function( data ) {
+      var jsStart = Date.now();
       var options;
 
       var table = new google.visualization.DataTable();
@@ -39,15 +40,89 @@ function renderTimeseries(seriesName, targetDivName) {
           }
       }
 
+      var renderStart = Date.now();
       var chart = new google.visualization.LineChart(
           document.getElementById(targetDivName));
-      var renderStart = Date.now();
       chart.draw(table, options);
       var renderEnd = Date.now();
 
       $("#debug").append("<div>DBConnect: " + data.connTimeUsec +
                          "us - DBQuery: " + data.queryTimeUsec +
                          "us - Render: " + 1000 * (renderEnd - renderStart) +
+                         "us - All JS: " + 1000 * (renderEnd - jsStart) +
+                         "us</div>");
+
+  });
+}
+
+
+//------
+
+function init_v3() {
+  renderTimeseriesV3('es.mrjon.temperatureFMillis', 'temps_div');
+  renderTimeseriesV3('es.mrjon.relativeHumidityMillis', 'humid_div');
+}
+
+function renderTimeseriesV3(seriesName, targetDivName) {
+  var params = window.location.search.replace("\?", "&");
+
+  $.getJSON( "/query?tsname=" + seriesName + params, function( data ) {
+      var jsStart = Date.now();
+      var ridToColumn = {};
+      var allRids = [];
+
+      var chartData = [];
+
+      for (var i = 0; i < data.points.length; i++) {
+          for (rid in data.points[i].vals) {
+              if (!ridToColumn[rid]) {
+                  ridToColumn[rid] = 1 + allRids.length;
+                  allRids.push(rid)
+              }
+          }
+      }
+
+      for (var i = 0; i < data.points.length; i++) {
+          var row = new Array(allRids.length + 1);
+          row[0] = new Date(1000 * data.points[i].ts);
+          for (var rid in data.points[i].vals) {
+              row[ridToColumn[rid]] =
+                  (1.0 * data.points[i].vals[rid]) / 1000;
+          }
+          chartData.push(row);
+      }
+
+      var labels = ["Time"];
+      for (var i = 0; i < allRids.length; i++) {
+          labels.push("Reporter " + allRids[i]);
+      }
+
+
+      var renderStart = Date.now();
+      new Dygraph(document.getElementById(targetDivName),
+                  chartData,
+                  {
+                      labels: labels,
+                      width: 800,
+                      height: 300,
+                      drawPoints: true,
+                      strokeWidth: 0,
+                      axes: {
+                          x: {
+                              axisLabelFormatter: function(d, gran) {
+                                  return Dygraph.zeropad(d.getHours())
+                                      + ":"
+                                      + Dygraph.zeropad(d.getMinutes());
+                              }
+                          }
+                      }
+                  });
+      var renderEnd = Date.now();
+
+      $("#debug").append("<div>DBConnect: " + data.connTimeUsec +
+                         "us - DBQuery: " + data.queryTimeUsec +
+                         "us - Render: " + 1000 * (renderEnd - renderStart) +
+                         "us - All JS: " + 1000 * (renderEnd - jsStart) +
                          "us</div>");
 
   });
