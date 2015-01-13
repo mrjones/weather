@@ -1,8 +1,9 @@
-google.load('visualization', '1.0', {'packages':['corechart']});
 
 function init() {
-  renderTimeseries('es.mrjon.temperatureFMillis', 'temps_div');
-  renderTimeseries('es.mrjon.relativeHumidityMillis', 'humid_div');
+    google.load('visualization', '1.0', {'packages':['corechart']});
+
+    renderTimeseries('es.mrjon.temperatureFMillis', 'temps_div');
+    renderTimeseries('es.mrjon.relativeHumidityMillis', 'humid_div');
 }
 
 function renderTimeseries(seriesName, targetDivName) {
@@ -84,19 +85,24 @@ function renderTimeseriesV3(seriesName, targetDivName) {
 
       for (var i = 0; i < data.points.length; i++) {
           var row = new Array(allRids.length + 1);
+
           row[0] = new Date(1000 * data.points[i].ts);
+          for (var c = 0; c < allRids.length; c++) {
+              row[c+1] = null;   
+          }
+
           for (var rid in data.points[i].vals) {
               row[ridToColumn[rid]] =
                   (1.0 * data.points[i].vals[rid]) / 1000;
           }
+
           chartData.push(row);
       }
 
       var labels = ["Time"];
       for (var i = 0; i < allRids.length; i++) {
-          labels.push("Reporter " + allRids[i]);
+          labels.push("Reporter_" + allRids[i]);
       }
-
 
       var renderStart = Date.now();
       new Dygraph(document.getElementById(targetDivName),
@@ -104,9 +110,12 @@ function renderTimeseriesV3(seriesName, targetDivName) {
                   {
                       labels: labels,
                       width: 800,
-                      height: 300,
-                      drawPoints: true,
-                      strokeWidth: 0,
+                      height: 250,
+                      drawPoints: false,
+//                      strokeWidth: 0,
+                      connectSeparatedPoints: true,
+                      pointSize: 2,
+                      colors: [ 'red', 'blue' ],
                       axes: {
                           x: {
                               axisLabelFormatter: function(d, gran) {
