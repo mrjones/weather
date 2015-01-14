@@ -104,6 +104,21 @@ function renderTimeseriesV3(seriesName, targetDivName, yAxisLabel) {
           labels.push("Reporter_" + allRids[i]);
       }
 
+      var renderHour = function(h) {
+          modH = h % 12;
+          if (modH == 0) {
+              return 12;
+          }
+          return modH;
+      }
+
+      var renderDate = function(d, gran) {
+          return renderHour(d.getHours())
+              + ":"
+              + Dygraph.zeropad(d.getMinutes())
+              + (d.getHours() >= 12 ? "PM" : "AM");
+      };
+
       var renderStart = Date.now();
       new Dygraph(document.getElementById(targetDivName),
                   chartData,
@@ -125,15 +140,8 @@ function renderTimeseriesV3(seriesName, targetDivName, yAxisLabel) {
                       interactionModel: {},
                       gridLineColor: '#CCCCCC',
                       axes: {
-                          y : {
-                          },
                           x: {
-                              axisLabelFormatter: function(d, gran) {
-                                  return 
-                                  return Dygraph.zeropad(d.getHours())
-                                      + ":"
-                                      + Dygraph.zeropad(d.getMinutes());
-                              }
+                              axisLabelFormatter: renderDate,
                           },
                       }
                   });
