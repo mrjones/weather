@@ -124,15 +124,38 @@ func (s *AppEngineStorage) Scan(start, end time.Time, seriesName string) (<-chan
 		q = q.Filter("TimeseriesId =", timeseriesId)
 	}
 
-	result := q.Run(s.context)
-	
 	points := make(chan *DataPoint)
 	errors := make(chan error)
 
+	/*
+	result := q.Run(s.context)	
 	go drain(points, errors, result)
+*/
+	go s.drainAll(points, errors, q)
+
 	return points, errors
 }
 
+func (s *AppEngineStorage) drainAll(
+	outPoints chan<- *DataPoint,
+	outErrors chan<- error,
+	query *datastore.Query) {
+
+	buf := []*DataPoint{}
+
+	_, err := query.GetAll(s.context, &buf)
+
+	if err != nil {
+		outErrors <- err
+	} else {
+		for _, p := range(buf) {
+			outPoints <- p
+		}
+	}
+
+	close(outPoints)
+	close(outErrors)
+}
 
 func drain(
 	outPoints chan<- *DataPoint,

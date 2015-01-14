@@ -60,11 +60,11 @@ function renderTimeseries(seriesName, targetDivName) {
 //------
 
 function init_v3() {
-  renderTimeseriesV3('es.mrjon.temperatureFMillis', 'temps_div');
-  renderTimeseriesV3('es.mrjon.relativeHumidityMillis', 'humid_div');
+  renderTimeseriesV3('es.mrjon.temperatureFMillis', 'temps_div', 'Temperature (F)');
+  renderTimeseriesV3('es.mrjon.relativeHumidityMillis', 'humid_div', 'Relative Humidity (%)');
 }
 
-function renderTimeseriesV3(seriesName, targetDivName) {
+function renderTimeseriesV3(seriesName, targetDivName, yAxisLabel) {
   var params = window.location.search.replace("\?", "&");
 
   $.getJSON( "/query?tsname=" + seriesName + params, function( data ) {
@@ -110,20 +110,31 @@ function renderTimeseriesV3(seriesName, targetDivName) {
                   {
                       labels: labels,
                       width: 800,
-                      height: 250,
+                      height: 200,
                       drawPoints: false,
-//                      strokeWidth: 0,
+                      strokeWidth: 2,
+                      legend: 'always',
                       connectSeparatedPoints: true,
-                      pointSize: 2,
-                      colors: [ 'red', 'blue' ],
+                      pointSize: 1.5,
+                      colors: [ '#F15854', '#5DA5DA' ],
+                      ylabel: yAxisLabel,
+                      axisLabelWidth: 60,
+                      axisLineColor: '#666666',
+                      axisLabelColor: '#666666',
+                      axisLineWidth: 1.5,
+                      interactionModel: {},
+                      gridLineColor: '#CCCCCC',
                       axes: {
+                          y : {
+                          },
                           x: {
                               axisLabelFormatter: function(d, gran) {
+                                  return 
                                   return Dygraph.zeropad(d.getHours())
                                       + ":"
                                       + Dygraph.zeropad(d.getMinutes());
                               }
-                          }
+                          },
                       }
                   });
       var renderEnd = Date.now();
