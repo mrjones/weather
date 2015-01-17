@@ -112,7 +112,8 @@ serve config = do
 
 allPages :: HubConfig -> ServerPartT IO Response
 allPages config =
-  msum [ dir "js" $ serveFile (asContentType "text/javascript") "static/app.js"
+  msum [ dir "js" $ dir "app.js" $ serveFile (asContentType "text/javascript") "static/app.js"
+       , dir "css" $ dir "hub.css" $ serveFile (asContentType "text/css") "static/hub.css"
        , dir "report" $ reportPage config
        , dir "query" $ queryPage config
        , dashboardPage
@@ -277,8 +278,10 @@ dashboardHtml =
     H.head $ do
       H.title "Fortress Weather"
       importJs "//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"
-      importJs "https://www.google.com/jsapi"
+      importJs "https://cdnjs.cloudflare.com/ajax/libs/dygraph/1.1.0/dygraph-combined-dev.js"
       importJs "/js/app.js"
+      H.link ! A.href "http://fonts.googleapis.com/css?family=Roboto" ! A.rel "stylesheet" ! A.type_ "text/css"
+      H.link ! A.href "/css/hub.css" ! A.rel "stylesheet" ! A.type_ "text/css"
     H.body ! A.onload "init()" $ do
       H.div ! A.id "temps_div" $ ""
       H.div ! A.id "humid_div" $ ""
