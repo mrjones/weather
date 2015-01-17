@@ -156,8 +156,9 @@ instance QueryResults Point where
   convertResults fs vs = convertError fs vs 4
 
 queryPoints :: MySQL.Connection -> Query -> IO [Point]
-queryPoints conn q =
-  MySQL.query conn "SELECT value, series_id, timestamp, reporter_id FROM history WHERE series_id = (?) AND timestamp > DATE_SUB(CURDATE(), INTERVAL (?) SECOND)" (querySeriesId q, queryDurationSec q)
+queryPoints conn q = do
+  putStrLn $ show $ queryDurationSec q
+  MySQL.query conn "SELECT value, series_id, timestamp, reporter_id FROM history WHERE series_id = (?) AND timestamp > DATE_SUB(NOW(), INTERVAL (?) SECOND)" (querySeriesId q, queryDurationSec q)
 
 --
 -- JSON
