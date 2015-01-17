@@ -10,9 +10,10 @@ import qualified Data.ByteString.Lazy.Char8 as LC8 (unpack)
 import Data.Aeson (toJSON, ToJSON, (.=))
 import qualified Data.Aeson as JSON (encode, object)
 import Data.Digest.CRC32 (crc32)
+import Data.Map (fromList, Map)
+import Data.Maybe (fromMaybe)
 import Data.Time.Clock (diffUTCTime, getCurrentTime, NominalDiffTime, UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
-import Data.Maybe (fromMaybe)
 import Happstack.Server (asContentType, badRequest, bindPort, dir, look, nullConf, ok, port, toResponse, Response, serveFile, ServerPartT, simpleHTTPWithSocket)
 import Happstack.Server.RqData (checkRq, getDataFn, RqData)
 import Database.MySQL.Simple (connectUser, connectPassword, connectDatabase, connectHost, defaultConnectInfo, execute)
@@ -99,6 +100,7 @@ data QueryResponse =
                 , responseConnectTimeUsec :: Int
                 , responseQueryTimeUsec :: Int
                 , responseTotalTimeUsec :: Int
+                , responseReporterNames :: Map String String
                 }
 
 serve :: HubConfig -> IO ()
@@ -178,6 +180,7 @@ instance ToJSON QueryResponse where
                          , "connTimeUsec" .= (responseConnectTimeUsec r)
                          , "queryTimeUsec" .= (responseQueryTimeUsec r)
                          , "totalTimeUsec" .= (responseTotalTimeUsec r)
+                         , "reporterNames" .= (responseReporterNames r)
                          ]
 
 --
@@ -248,6 +251,10 @@ parseQuery (seriesName, mduration) = do
   duration <- verboseReadEither (fromMaybe "86400" mduration)
   Right $ Query (seriesNameToId seriesName) duration
 
+-- TODO(mrjones): make this configurable
+reporterNames :: Map String String
+reporterNames = fromList [("1", "LivingRoom"), ("3", "BedRoom")]
+
 queryPage :: HubConfig -> UTCTime -> ServerPartT IO Response
 queryPage conf startTime = do
   equery <- getDataFn $ queryParams `checkRq` parseQuery
@@ -260,7 +267,7 @@ queryPage conf startTime = do
       points <- liftIO $ queryPoints conn query
       timeC <- liftIO $ getCurrentTime
       ok $ toResponse $ (LC8.unpack . JSON.encode) $
-        QueryResponse points (toUsec (diffUTCTime timeB timeA)) (toUsec (diffUTCTime timeC timeB)) (toUsec (diffUTCTime timeC startTime))
+        QueryResponse points (toUsec (diffUTCTime timeB timeA)) (toUsec (diffUTCTime timeC timeB)) (toUsec (diffUTCTime timeC startTime)) reporterNames
 
 toUsec :: NominalDiffTime -> Int
 toUsec dt = floor (1000 * 1000 * (realToFrac dt :: Double))

@@ -39,7 +39,11 @@ function renderTimeseries(seriesName, targetDivName, yAxisLabel) {
 
       var labels = ["Time"];
       for (var i = 0; i < allRids.length; i++) {
-          labels.push("Reporter_" + allRids[i]);
+          if (data.reporterNames.hasOwnProperty(allRids[i])) {
+              labels.push(data.reporterNames[allRids[i]]);
+          } else {
+              labels.push("Reporter_" + allRids[i]);
+          }
       }
 
       var renderHour = function(h) {
@@ -69,7 +73,7 @@ function renderTimeseries(seriesName, targetDivName, yAxisLabel) {
                       legend: 'always',
                       connectSeparatedPoints: true,
 //                      pointSize: 1.5,
-                      colors: [ '#F15854', '#5DA5DA' ],
+//                      colors: [ '#F15854', '#5DA5DA' ],
                       ylabel: yAxisLabel,
                       axisLabelWidth: 60,
                       axisLineColor: '#666666',
@@ -81,7 +85,15 @@ function renderTimeseries(seriesName, targetDivName, yAxisLabel) {
                           x: {
                               axisLabelFormatter: renderDate,
                           },
-                      }
+                      },
+                      series: {
+                          BedRoom: {
+                              color: '#F15854'
+                          },
+                          LivingRoom: {
+                              color: '#5DA5DA'
+                          },
+                      },
                   });
       var renderEnd = Date.now();
 
