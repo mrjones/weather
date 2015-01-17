@@ -159,7 +159,6 @@ instance QueryResults Point where
 
 queryPoints :: MySQL.Connection -> Query -> IO [Point]
 queryPoints conn q = do
-  putStrLn $ show $ queryDurationSec q
   MySQL.query conn "SELECT value, series_id, timestamp, reporter_id FROM history WHERE series_id = (?) AND timestamp > DATE_SUB(NOW(), INTERVAL (?) SECOND)" (querySeriesId q, queryDurationSec q)
 
 --
