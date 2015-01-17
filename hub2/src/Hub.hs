@@ -98,6 +98,7 @@ data QueryResponse =
   QueryResponse { responsePoints :: [Point]
                 , responseConnectTimeUsec :: Int
                 , responseQueryTimeUsec :: Int
+                , responseTotalTimeUsec :: Int
                 }
 
 serve :: HubConfig -> IO ()
@@ -111,11 +112,12 @@ serve config = do
   simpleHTTPWithSocket socket httpConf $ allPages config
 
 allPages :: HubConfig -> ServerPartT IO Response
-allPages config =
+allPages config = do
+  requestStartTime <- liftIO $ getCurrentTime
   msum [ dir "js" $ dir "app.js" $ serveFile (asContentType "text/javascript") "static/app.js"
        , dir "css" $ dir "hub.css" $ serveFile (asContentType "text/css") "static/hub.css"
        , dir "report" $ reportPage config
-       , dir "query" $ queryPage config
+       , dir "query" $ queryPage config requestStartTime
        , dashboardPage
        ]
 
@@ -174,6 +176,7 @@ instance ToJSON QueryResponse where
   toJSON r = JSON.object [ "points" .= (responsePoints r)
                          , "connTimeUsec" .= (responseConnectTimeUsec r)
                          , "queryTimeUsec" .= (responseQueryTimeUsec r)
+                         , "totalTimeUsec" .= (responseTotalTimeUsec r)
                          ]
 
 --
@@ -244,8 +247,8 @@ parseQuery (seriesName, mduration) = do
   duration <- verboseReadEither (fromMaybe "86400" mduration)
   Right $ Query (seriesNameToId seriesName) duration
 
-queryPage :: HubConfig -> ServerPartT IO Response
-queryPage conf = do
+queryPage :: HubConfig -> UTCTime -> ServerPartT IO Response
+queryPage conf startTime = do
   equery <- getDataFn $ queryParams `checkRq` parseQuery
   case equery of
     Left e -> badRequest $ toResponse $ reportPageHtml $ unlines e
@@ -256,7 +259,7 @@ queryPage conf = do
       points <- liftIO $ queryPoints conn query
       timeC <- liftIO $ getCurrentTime
       ok $ toResponse $ (LC8.unpack . JSON.encode) $
-        QueryResponse points (toUsec (diffUTCTime timeB timeA)) (toUsec (diffUTCTime timeC timeB))
+        QueryResponse points (toUsec (diffUTCTime timeB timeA)) (toUsec (diffUTCTime timeC timeB)) (toUsec (diffUTCTime timeC startTime))
 
 toUsec :: NominalDiffTime -> Int
 toUsec dt = floor (1000 * 1000 * (realToFrac dt :: Double))

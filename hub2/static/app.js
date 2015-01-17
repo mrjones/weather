@@ -4,10 +4,11 @@ function init() {
 }
 
 function renderTimeseries(seriesName, targetDivName, yAxisLabel) {
+  var jsStart = Date.now();
   var params = window.location.search.replace("\?", "&");
 
   $.getJSON( "/query?tsname=" + seriesName + params, function( data ) {
-      var jsStart = Date.now();
+      var gotResponse = Date.now();
       var ridToColumn = {};
       var allRids = [];
 
@@ -84,10 +85,15 @@ function renderTimeseries(seriesName, targetDivName, yAxisLabel) {
                   });
       var renderEnd = Date.now();
 
-      $("#debug").append("<div>DBConnect: " + data.connTimeUsec +
-                         "us - DBQuery: " + data.queryTimeUsec +
-                         "us - Render: " + 1000 * (renderEnd - renderStart) +
-                         "us - All JS: " + 1000 * (renderEnd - jsStart) +
+      $("#debug").append("<div>" + seriesName +
+                         " -- <b>Server</b> " +
+                         "DBConnect: " + data.connTimeUsec +
+                         "us, DBQuery: " + data.queryTimeUsec +
+                         "us, Total: " + data.totalTimeUsec +
+                         "us -- <b>Client</b> " +
+                         "Wait: " + 1000 * (gotResponse - jsStart) +
+                         "us, Render: " + 1000 * (renderEnd - renderStart) +
+                         "us -- <b>Total</b>: " + 1000 * (renderEnd - jsStart) +
                          "us</div>");
 
   });
