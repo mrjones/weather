@@ -87,10 +87,10 @@ function renderTimeseries(seriesName, targetDivName, yAxisLabel) {
                           },
                       },
                       series: {
-                          BedRoom: {
+                          'Bedroom': {
                               color: '#F15854'
                           },
-                          LivingRoom: {
+                          'Living Room': {
                               color: '#5DA5DA'
                           },
                       },
