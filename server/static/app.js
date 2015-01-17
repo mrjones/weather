@@ -19,11 +19,10 @@ function renderTimeseries(seriesName, targetDivName) {
       var allRids = [];
 
       for (var i = 0; i < data.points.length; i++) {
-          for (rid in data.points[i].vals) {
-              if (!ridToColumn[rid]) {
-                  ridToColumn[rid] = 1 + allRids.length;
-                  allRids.push(rid)
-              }
+          var rid = data.points[i].rid;
+          if (!ridToColumn[rid]) {
+              ridToColumn[rid] = 1 + allRids.length;
+              allRids.push(rid)
           }
       }
 
@@ -35,10 +34,9 @@ function renderTimeseries(seriesName, targetDivName) {
 
       for (var i = 0; i < data.points.length; i++) {
           table.setCell(i, 0, new Date(1000 * data.points[i].ts));
-          for (var rid in data.points[i].vals) {
-              table.setCell(
-                  i, ridToColumn[rid], (1.0 * data.points[i].vals[rid]) / 1000);
-          }
+          var rid = data.points[i].rid;
+          var val = data.points[i].val;
+          table.setCell(i, ridToColumn[rid], (1.0 * val) / 1000);
       }
 
       var renderStart = Date.now();
@@ -75,27 +73,25 @@ function renderTimeseriesV3(seriesName, targetDivName, yAxisLabel) {
       var chartData = [];
 
       for (var i = 0; i < data.points.length; i++) {
-          for (rid in data.points[i].vals) {
-              if (!ridToColumn[rid]) {
-                  ridToColumn[rid] = 1 + allRids.length;
-                  allRids.push(rid)
-              }
+          var rid = data.points[i].rid;
+          if (!ridToColumn[rid]) {
+              ridToColumn[rid] = 1 + allRids.length;
+              allRids.push(rid)
           }
       }
 
       for (var i = 0; i < data.points.length; i++) {
           var row = new Array(allRids.length + 1);
+          var rid = data.points[i].rid;
+          var val = data.points[i].val;
+          var ts = data.points[i].ts;
 
-          row[0] = new Date(1000 * data.points[i].ts);
+          row[0] = new Date(1000 * ts);
           for (var c = 0; c < allRids.length; c++) {
               row[c+1] = null;   
           }
 
-          for (var rid in data.points[i].vals) {
-              row[ridToColumn[rid]] =
-                  (1.0 * data.points[i].vals[rid]) / 1000;
-          }
-
+          row[ridToColumn[rid]] = (1.0 * val) / 1000;
           chartData.push(row);
       }
 
@@ -130,7 +126,7 @@ function renderTimeseriesV3(seriesName, targetDivName, yAxisLabel) {
                       strokeWidth: 2,
                       legend: 'always',
                       connectSeparatedPoints: true,
-                      pointSize: 1.5,
+//                      pointSize: 1.5,
                       colors: [ '#F15854', '#5DA5DA' ],
                       ylabel: yAxisLabel,
                       axisLabelWidth: 60,

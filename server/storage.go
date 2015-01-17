@@ -133,6 +133,8 @@ func (s *AppEngineStorage) Scan(start, end time.Time, seriesName string) (<-chan
 */
 	go s.drainAll(points, errors, q)
 
+	fmt.Println("here")
+
 	return points, errors
 }
 
@@ -143,7 +145,11 @@ func (s *AppEngineStorage) drainAll(
 
 	buf := []*DataPoint{}
 
+	start := time.Now()
 	_, err := query.GetAll(s.context, &buf)
+	end := time.Now()
+
+	s.context.Infof("GetAllTime: %v", end.Sub(start))
 
 	if err != nil {
 		outErrors <- err

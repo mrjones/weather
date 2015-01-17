@@ -57,7 +57,8 @@ type JsonDataSeries struct {
 
 type JsonDataPoint struct {
 	Timestamp int64 `json:"ts"`
-	Values map[string]int64 `json:"vals"`
+	Value int64 `json:"val"`
+	ReporterId int64 `json:"rid"`
 }
 
 func (d *DataPoint) DebugString() string {
@@ -191,8 +192,6 @@ func (s *Server) handleQuery(resp http.ResponseWriter, req *http.Request) {
 		Points: make([]JsonDataPoint, 0),
 	}
 
-	first := true
-	jdp := JsonDataPoint{}
 	done := false
 	for !done {
 		select {
@@ -202,16 +201,13 @@ func (s *Server) handleQuery(resp http.ResponseWriter, req *http.Request) {
 				done = true
 				break
 			}
-			if first || jdp.Timestamp != dp.Timestamp.Unix() {
-				first = false
-				jdp = JsonDataPoint{
-					Timestamp: dp.Timestamp.Unix(),
-					Values: make(map[string]int64),
-				}
-				series.Points = append(series.Points, jdp)
-			}
 
-			jdp.Values[strconv.FormatInt(dp.ReporterId, 10)] = dp.Value
+			jdp := JsonDataPoint{
+				Timestamp: dp.Timestamp.Unix(),
+				Value: dp.Value,
+				ReporterId: dp.ReporterId,
+			}
+			series.Points = append(series.Points, jdp)
 		case err, ok := <- errors:
 			if !ok {
 				done = true
