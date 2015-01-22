@@ -15,8 +15,6 @@ RUN cabal sandbox init
 RUN cabal install --only-dependencies
 RUN cabal install
 
-RUN mkdir /bin && 
-
 EXPOSE 5999
 
 ENTRYPOINT ["/src/weather/hub2/.cabal-sandbox/bin/hub", "--port", "5999", "--staticdir", "/src/weather/hub2/static"]
