@@ -39,7 +39,8 @@ data Flag = DBUsernameFlag String
           | DBPasswordFlag String
           | DBHostnameFlag String
           | PortFlag Int
-          | MakeDatabaseFlag deriving (Show)
+          | MakeDatabaseFlag
+          | StaticDirFlag String deriving (Show)
 
 flagDefs :: [OptDescr Flag]
 flagDefs =
@@ -48,13 +49,15 @@ flagDefs =
   , Option ['h'] ["dbhost"] (ReqArg dbHostFlag "HOST") "MySQL hostname"
   , Option ['p'] ["port"] (ReqArg portFlag "PORT") "HTTP port"
   , Option ['m'] ["mkdb"] (NoArg MakeDatabaseFlag) "Create the DB"
+  , Option ['s'] ["staticdir"] (ReqArg staticDirFlag "DIR") "Static dir"
   ]
 
-dbUserFlag, dbPassFlag, dbHostFlag, portFlag :: String -> Flag
+dbUserFlag, dbPassFlag, dbHostFlag, portFlag, staticDirFlag :: String -> Flag
 dbUserFlag = DBUsernameFlag
 dbPassFlag = DBPasswordFlag
 dbHostFlag = DBHostnameFlag
 portFlag ms = PortFlag $ fromMaybe 5999 $ readMaybe ms
+staticDirFlag = StaticDirFlag
 
 parseFlags :: [String] -> IO [Flag]
 parseFlags argv = 
@@ -71,10 +74,11 @@ configFromFlags fs =
             DBHostnameFlag h -> c { hubDbHostname = h }
             PortFlag p -> c { hubPort = p }
             MakeDatabaseFlag -> c { hubCreateDatabase = True }
+            StaticDirFlag s -> c { hubStaticDir = s }
         ) defaultConfig fs
 
 defaultConfig :: HubConfig
-defaultConfig = HubConfig 5999 "weather" "weather" "localhost" False
+defaultConfig = HubConfig 5999 "weather" "weather" "localhost" False "static"
 
 type SeriesID = Int
 
@@ -83,6 +87,7 @@ data HubConfig = HubConfig { hubPort :: Int
                            , hubDbPassword :: String
                            , hubDbHostname :: String
                            , hubCreateDatabase :: Bool
+                           , hubStaticDir :: String
                            }
 
 data Point = Point { dpValue :: Int
@@ -113,11 +118,15 @@ serve config = do
   putStrLn $ "Serving on port: " ++ (show (hubPort config))
   simpleHTTPWithSocket socket httpConf $ allPages config
 
+staticFilename :: HubConfig -> String -> String
+staticFilename config relativeName =
+  (hubStaticDir config) ++ "/" ++ relativeName
+
 allPages :: HubConfig -> ServerPartT IO Response
 allPages config = do
   requestStartTime <- liftIO $ getCurrentTime
-  msum [ dir "js" $ dir "app.js" $ serveFile (asContentType "text/javascript") "static/app.js"
-       , dir "css" $ dir "hub.css" $ serveFile (asContentType "text/css") "static/hub.css"
+  msum [ dir "js" $ dir "app.js" $ serveFile (asContentType "text/javascript") (staticFilename config "/app.js")
+       , dir "css" $ dir "hub.css" $ serveFile (asContentType "text/css") (staticFilename config "hub.css")
        , dir "report" $ reportPage config
        , dir "query" $ queryPage config requestStartTime
        , dashboardPage
