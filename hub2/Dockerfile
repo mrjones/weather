@@ -1,20 +1,15 @@
-FROM haskell:7.8
+FROM ubuntu:14.04
 MAINTAINER Matt Jones <jonesmr@gmail.com>
 
 RUN apt-get update && apt-get install -y \
-    git \
-    libpcre3-dev \
-    mysql-client \
-    libmysqlclient-dev
+    libffi6 \
+    libmysqlclient-dev \
+    libpcre3-dev
 
-RUN cabal update
-
-RUN git clone https://github.com/mrjones/weather.git /src/weather
-WORKDIR /src/weather/hub2
-RUN cabal sandbox init
-RUN cabal install --only-dependencies
-RUN cabal install
+RUN mkdir -p /deploy/bin && mkdir -p /deploy/static
+ADD .cabal-sandbox/bin/hub /deploy/bin/hub
+ADD static /deploy/static/
 
 EXPOSE 5999
 
-ENTRYPOINT ["/src/weather/hub2/.cabal-sandbox/bin/hub", "--port", "5999", "--staticdir", "/src/weather/hub2/static"]
+ENTRYPOINT ["/deploy/bin/hub", "--port", "5999", "--staticdir", "/deploy/static"]
