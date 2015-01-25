@@ -22,6 +22,7 @@ import Database.MySQL.Simple.QueryResults (QueryResults, convertError, convertRe
 import Database.MySQL.Simple.Result (convert)
 import System.Console.GetOpt (ArgDescr(..), ArgOrder(..), getOpt, OptDescr(..), usageInfo)
 import System.Environment (getArgs)
+import System.IO (hSetBuffering, BufferMode(LineBuffering), stdout)
 import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
@@ -29,6 +30,7 @@ import Text.Read (readMaybe)
 
 main :: IO ()
 main = do
+  hSetBuffering stdout LineBuffering
   putStrLn "-----"
   argv <- getArgs
   flags <- parseFlags argv
