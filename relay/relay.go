@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"net/http"
+	_ "net/http/pprof"
 	"time"
 
 	"github.com/rcrowley/go-metrics"
@@ -371,33 +372,43 @@ func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportError
 	successCounter := metrics.GetOrRegisterCounter("report-to-hub-successes", nil)
 	errorCounter := metrics.GetOrRegisterCounter("report-to-hub-errors", nil)
 
+	hubs := []string{
+		"http://fortressweather.appspot.com",
+		"http://weather.mrjon.es",
+	}
+
 	for {
 		select {
 		case report := <-reports:
 			log.Println(report.DebugString())
 			for id, value := range(report.metrics) {
-				url := fmt.Sprintf(
-					"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
-					time.Now().Unix(), value, id, report.reporterId)
-				fmt.Printf("URL: %s\n", url)
+				
+				for _, hub := range(hubs) {
+					url := fmt.Sprintf(
+						"%s/report?t_sec=%d&v=%d&tsname=%s&rid=%d",
+//					"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
+//					"http://weather.mrjon.es/rep?t_sec=%d&v=%d&tsname=%s&rid=%d",
+						hub, time.Now().Unix(), value, id, report.reporterId)
+					fmt.Printf("URL: %s\n", url)
 
-				resp, err := http.Get(url)
-				if err != nil {
-					errorCounter.Inc(1)
-					log.Println(err);
-					continue;
+					resp, err := http.Get(url)
+					if err != nil {
+						errorCounter.Inc(1)
+						log.Println(err);
+						continue;
+					}
+
+					defer resp.Body.Close()
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						errorCounter.Inc(1)
+						log.Println(err);
+						continue;
+					}
+
+					successCounter.Inc(1)
+					fmt.Printf("Reported metric: %s\n", body)
 				}
-
-				defer resp.Body.Close()
-				body, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					errorCounter.Inc(1)
-					log.Println(err);
-					continue;
-				}
-
-				successCounter.Inc(1)
-				fmt.Printf("Reported metric: %s\n", body)
 			}
 		case error := <-errors:
 			counterName := fmt.Sprintf("errors-reported-by-reporter-%d", error.reporterId)
