@@ -386,8 +386,6 @@ func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportError
 				for _, hub := range(hubs) {
 					url := fmt.Sprintf(
 						"%s/report?t_sec=%d&v=%d&tsname=%s&rid=%d",
-//					"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
-//					"http://weather.mrjon.es/rep?t_sec=%d&v=%d&tsname=%s&rid=%d",
 						hub, time.Now().Unix(), value, id, report.reporterId)
 					fmt.Printf("URL: %s\n", url)
 
@@ -398,8 +396,9 @@ func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportError
 						continue;
 					}
 
-					defer resp.Body.Close()
 					body, err := ioutil.ReadAll(resp.Body)
+					resp.Body.Close()
+
 					if err != nil {
 						errorCounter.Inc(1)
 						log.Println(err);
