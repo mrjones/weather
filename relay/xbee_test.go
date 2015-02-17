@@ -21,7 +21,7 @@ func TestEncodeDecordRxPackets(t *testing.T) {
 		},
 	}
 
-	for _, original := range(testData) {
+	for _, original := range testData {
 		result, err := ParseRxPacket(original.Serialize())
 		AssertNoError(err, t)
 		PacketsEq(original, result, t)
