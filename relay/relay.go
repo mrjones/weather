@@ -9,8 +9,9 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"os"
 	"net/http"
+	_ "net/http/pprof"
+	"os"
 	"time"
 
 	"github.com/rcrowley/go-metrics"
@@ -20,7 +21,7 @@ const (
 	CURRENT_API_VERSION = 0x01
 
 	REPORT_METRICS_RPC_ID = 3
-	REPORT_ERROR_RPC_ID = 4
+	REPORT_ERROR_RPC_ID   = 4
 )
 
 type ReportMetricsArg struct {
@@ -29,7 +30,7 @@ type ReportMetricsArg struct {
 }
 
 type ReportErrorArg struct {
-	reporterId uint64
+	reporterId   uint64
 	errorMessage string
 }
 
@@ -114,7 +115,7 @@ func ParseReportMetricsArg(data []byte, offset uint64) (*ReportMetricsArg, error
 	return report, nil
 }
 
-func (m *ReportErrorArg) Serialize()([]byte, error) {
+func (m *ReportErrorArg) Serialize() ([]byte, error) {
 	i := uint64(0)
 	buf := make([]byte, 1024)
 	var err error
@@ -319,7 +320,7 @@ type Relay struct {
 	metricIds map[string]uint
 	nextId    uint
 	reports   chan<- *ReportMetricsArg
-	errors   chan<- *ReportErrorArg
+	errors    chan<- *ReportErrorArg
 	shutdown  bool
 }
 
@@ -338,7 +339,7 @@ func NewRelay(packets *PacketPair, reports chan<- *ReportMetricsArg, errors chan
 		metricIds: make(map[string]uint),
 		nextId:    0,
 		reports:   reports,
-		errors: errors,
+		errors:    errors,
 	}
 	go r.loop()
 	return r, nil
@@ -371,33 +372,42 @@ func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportError
 	successCounter := metrics.GetOrRegisterCounter("report-to-hub-successes", nil)
 	errorCounter := metrics.GetOrRegisterCounter("report-to-hub-errors", nil)
 
+	hubs := []string{
+		"http://fortressweather.appspot.com",
+		"http://weather.mrjon.es",
+	}
+
 	for {
 		select {
 		case report := <-reports:
 			log.Println(report.DebugString())
-			for id, value := range(report.metrics) {
-				url := fmt.Sprintf(
-					"http://fortressweather.appspot.com/v2/simplereport?t_sec=%d&v=%d&tsname=%s&rid=%d",
-					time.Now().Unix(), value, id, report.reporterId)
-				fmt.Printf("URL: %s\n", url)
+			for id, value := range report.metrics {
 
-				resp, err := http.Get(url)
-				if err != nil {
-					errorCounter.Inc(1)
-					log.Println(err);
-					continue;
+				for _, hub := range hubs {
+					url := fmt.Sprintf(
+						"%s/report?t_sec=%d&v=%d&tsname=%s&rid=%d",
+						hub, time.Now().Unix(), value, id, report.reporterId)
+					fmt.Printf("URL: %s\n", url)
+
+					resp, err := http.Get(url)
+					if err != nil {
+						errorCounter.Inc(1)
+						log.Println(err)
+						continue
+					}
+
+					body, err := ioutil.ReadAll(resp.Body)
+					resp.Body.Close()
+
+					if err != nil {
+						errorCounter.Inc(1)
+						log.Println(err)
+						continue
+					}
+
+					successCounter.Inc(1)
+					fmt.Printf("Reported metric: %s\n", body)
 				}
-
-				defer resp.Body.Close()
-				body, err := ioutil.ReadAll(resp.Body)
-				if err != nil {
-					errorCounter.Inc(1)
-					log.Println(err);
-					continue;
-				}
-
-				successCounter.Inc(1)
-				fmt.Printf("Reported metric: %s\n", body)
 			}
 		case error := <-errors:
 			counterName := fmt.Sprintf("errors-reported-by-reporter-%d", error.reporterId)
@@ -410,7 +420,7 @@ func handleIncoming(reports <-chan *ReportMetricsArg, errors <-chan *ReportError
 }
 
 type StatusServer struct {
-	port int
+	port      int
 	startTime time.Time
 }
 
@@ -448,7 +458,7 @@ func (s *StatusServer) logHandler(resp http.ResponseWriter, req *http.Request) {
 		resp.Write([]byte(err.Error()))
 		return
 	}
-	
+
 }
 
 func (s *StatusServer) ServeForever() {
@@ -465,7 +475,6 @@ func (s *StatusServer) ServeForever() {
 func NewStatusServer(port int) *StatusServer {
 	return &StatusServer{port: port}
 }
-
 
 func main() {
 	var statusPort = flag.Int(
@@ -501,7 +510,7 @@ func main() {
 		}
 	*/
 
-	if (*statusPort > 0) {
+	if *statusPort > 0 {
 		statusServer := NewStatusServer(*statusPort)
 		go statusServer.ServeForever()
 	} else {

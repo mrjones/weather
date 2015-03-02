@@ -81,7 +81,7 @@ func TestReceiveOneMessage(t *testing.T) {
 
 	original := ReportMetricsArg{
 		reporterId: 123456,
-		metrics: map[string]int64{"FOO": 255,"bar": 256},
+		metrics:    map[string]int64{"FOO": 255, "bar": 256},
 	}
 
 	fakeSerial.FromDevice <- reportAsRxPacketBytes(original, t)
@@ -97,7 +97,7 @@ func TestGarbageBeforeMessage(t *testing.T) {
 
 	original := ReportMetricsArg{
 		reporterId: 123456,
-		metrics: map[string]int64{"FOO": 255,"bar": 256},
+		metrics:    map[string]int64{"FOO": 255, "bar": 256},
 	}
 
 	// TODO(mrjones): Need to be able to handle a stray 0x7E here
@@ -121,5 +121,5 @@ func TestReportError(t *testing.T) {
 
 	ErrorReportsEq(&original, <-errors, t)
 
-	relay.Shutdown()	
+	relay.Shutdown()
 }

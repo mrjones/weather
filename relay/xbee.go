@@ -375,7 +375,7 @@ func (a *RawXbeeDevice) copyPayload(data []byte, offset int, len int) (int, erro
 }
 
 func (a *RawXbeeDevice) parseLength(data []byte, offset int, len int) (int, error) {
-	log.Printf("Extracted length byte: %d @ %d from %s %p\n", data[offset], offset, arrayAsHex(data), &data); 
+	log.Printf("Extracted length byte: %d @ %d from %s %p\n", data[offset], offset, arrayAsHex(data), &data)
 	a.currentFrame.length = (a.currentFrame.length << 8) + uint16(data[offset])
 	log.Printf("Length now %d\n", a.currentFrame.length)
 	a.bytesConsumedInState++
