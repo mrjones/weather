@@ -127,7 +127,7 @@ void loop() {
     xbeeSendVarUint((unsigned long)REPORTER_ID); // reporter ID
     xbeeSendString(errorMessage);
   }
-  delay(10L * 1000);
+  delay(60L * 1000);
 }
 
 // =====================================
