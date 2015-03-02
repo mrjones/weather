@@ -31,7 +31,7 @@ const int XBEE_TX_PIN = 10;  // connected to RX on the XBee
 #include <SoftwareSerial.h>
 #include "MPL3115A2.h"
 
-const int REPORTER_ID = 0x0003;
+const int REPORTER_ID = 0x0002;
 const Sensor SENSOR_TYPE = S_MPL3115A2;
 
 
@@ -521,7 +521,7 @@ bool xbeeSetup() {
      return false; 
   }
   
-  xbeeSend("ATMY3333\r");
+  xbeeSend("ATMY2222\r");
   if (!xbeeIsOk()) {
     return false; 
   }

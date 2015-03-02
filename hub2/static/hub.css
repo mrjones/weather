@@ -8,7 +8,7 @@ body {
     font-size: 80%;
 }
 
-#temps_div, #humid_div {
+#temps_div, #humid_div, #pressure_div {
     margin-left: auto;
     margin-right: auto;
     margin-top: 4em;
