@@ -1,3 +1,14 @@
+enum Sensor {
+  S_RHT03,
+  S_HIH6130,
+  S_MPL3115A2
+};
+
+struct Reading {
+  String metricId;
+  long value;
+};
+
 // Wiring:
 // 
 // [1a] Temperature Sensor: HIH6130
@@ -11,15 +22,18 @@ const int RHT_PIN = 4;
 // [2] XBee
 // For RX and TX, pick any pins, subject to the limitations at:
 // http://arduino.cc/en/Reference/SoftwareSerial
-const int XBEE_RX_PIN = 2;  // connected to TX on the XBee
-const int XBEE_TX_PIN = 3;  // connected to RX on the XBee
+const int XBEE_RX_PIN = 9;  // connected to TX on the XBee
+const int XBEE_TX_PIN = 10;  // connected to RX on the XBee
 // +5  -> 5V
 // GND -> Ground
 
 #include <Wire.h>
 #include <SoftwareSerial.h>
+#include "MPL3115A2.h"
 
 const int REPORTER_ID = 0x0003;
+const Sensor SENSOR_TYPE = S_MPL3115A2;
+
 
 const int LED_PIN = 13;
 
@@ -31,12 +45,26 @@ const int debug = SOME;
 
 SoftwareSerial xbee = SoftwareSerial(XBEE_RX_PIN, XBEE_TX_PIN);
 
+MPL3115A2 pressureSensor;
+
 void setup() {
   pinMode(LED_PIN, OUTPUT);
 
   Serial.begin(9600);
   xbee.begin(9600);
-  Wire.begin();
+
+  switch (SENSOR_TYPE) {
+  case S_MPL3115A2:
+    pressureSensor.begin();
+    pressureSensor.setModeBarometer();
+    pressureSensor.setOversampleRate(7); // Set Oversample to the recommended 128
+    pressureSensor.enableEventFlags();
+    break;
+  case S_HIH6130:
+  case S_RHT03:
+    Wire.begin();
+    break;
+  }
   
   xbee.listen();
 
@@ -56,28 +84,40 @@ void blink(int count, int howLongMs) {
 }
 
 void loop() {
-  float relHumidity;
-  float tempF;
   String errorMessage = "<not set>";
-//  boolean hasData = fetchDataHIH6130(&relHumidity, &tempF);
-  boolean hasData = fetchDataRHT03(&relHumidity, &tempF, &errorMessage);
+
+  int collected;
+  struct Reading readings[2];
+
+  switch (SENSOR_TYPE) {
+  case S_HIH6130:
+    collected = fetchDataHIH6130(2, (struct Reading*)&readings);
+    break;
+  case S_RHT03:
+    collected = fetchDataRHT03(2, (struct Reading*)&readings, &errorMessage);
+    break;
+  case S_MPL3115A2:
+    collected = fetchDataMpl3115a2(2, (struct Reading*)&readings);
+    break;
+  }
+
+  Serial.print("Collected readings: ");
+  Serial.println(collected);
   
   blink(1, 100);
-  if (hasData) {
-    Serial.print("Humidity: ");
-    Serial.println((int)relHumidity);
-    Serial.print("Temperature: ");
-    Serial.println((int)tempF);
-
+  if (collected > 0) {
     xbeeSendVarUint((unsigned long)1);  // protocol version id
     xbeeSendVarUint((unsigned long)3);  // method id
     xbeeSendVarUint((unsigned long)REPORTER_ID); // reporter ID
-    xbeeSendVarUint((unsigned long)2);  // num metrics    
-    xbeeSendString("es.mrjon.relativeHumidityMillis");
-    xbeeSendVarUint((unsigned long)(1000 * relHumidity));
-    xbeeSendString("es.mrjon.temperatureFMillis");
-    xbeeSendVarUint((unsigned long)(1000 * tempF));
-
+    xbeeSendVarUint((unsigned long)collected);  // num metrics    
+    for (int i = 0; i < collected; i++) {
+      Serial.println(i);
+      xbeeSendString(readings[i].metricId);
+      xbeeSendVarUint(readings[i].value);
+      Serial.print(readings[i].metricId);
+      Serial.print(": ");
+      Serial.println(readings[i].value);
+    }
   } else {
     blink(2, 500);
     Serial.println("Unable to fetch sensor data");
@@ -87,7 +127,7 @@ void loop() {
     xbeeSendVarUint((unsigned long)REPORTER_ID); // reporter ID
     xbeeSendString(errorMessage);
   }
-  delay(60L * 1000);
+  delay(10L * 1000);
 }
 
 // =====================================
@@ -98,7 +138,12 @@ void loop() {
 // Section 2.1 "Sensor Address"
 const int SENSOR_ADDRESS = 0x27;
 
-boolean fetchDataHIH6130(float* relHumidity, float* tempF) {
+int fetchDataHIH6130(int maxReadings, struct Reading* readings) {
+  if (maxReadings < 2) {
+    Serial.println("readings buffer is not large enough");
+    return 0;
+  }
+
   if (debug >= SOME) { Serial.println("Fetching data..."); }
   
   // Section 2.5: Humidity and Temperature Data Fetch
@@ -165,30 +210,31 @@ boolean fetchDataHIH6130(float* relHumidity, float* tempF) {
   }
   
   if (s0 || s1) {
-    *relHumidity = 0;
-    *tempF = 0; 
-  } else {
-    unsigned int humidityReading = ((unsigned int)(buf[0] & 0x3F) << 8) | buf[1];
-    unsigned int tempReading = ((unsigned int)buf[2] << 6) | ((buf[3] & 0xFC) >> 2);
-
-    const unsigned int denom = (1 << 14) - 1;
-    // Section 4.0 Calculation of the Humidity from the Digital Output 
-    if (debug >= SOME) {
-      Serial.println("Humidity reading: ");
-      Serial.println(humidityReading);
-    }
-    *relHumidity = 100 * (float)humidityReading / denom;
-
-    // Section 5.0 Calculation of Optional Temperature from the Digital Output
-    if (debug >= SOME) {
-      Serial.println("Temp reading: ");
-      Serial.println(tempReading);
-    }
-    float tempC = ((float)tempReading / denom) * 165 - 40;
-    *tempF = (tempC * 9) / 5 + 32;
+    return 0;
   }
-  
-  return !s0 && !s1;
+
+  unsigned int humidityReading = ((unsigned int)(buf[0] & 0x3F) << 8) | buf[1];
+  unsigned int tempReading = ((unsigned int)buf[2] << 6) | ((buf[3] & 0xFC) >> 2);
+
+  const unsigned int denom = (1 << 14) - 1;
+  // Section 4.0 Calculation of the Humidity from the Digital Output 
+  if (debug >= SOME) {
+    Serial.println("Humidity reading: ");
+    Serial.println(humidityReading);
+  }
+  readings[0].value = 1000 * 100 * (float)humidityReading / denom;
+  readings[0].metricId = "es.mrjon.relativeHumidityMillis";
+
+  // Section 5.0 Calculation of Optional Temperature from the Digital Output
+  if (debug >= SOME) {
+    Serial.println("Temp reading: ");
+    Serial.println(tempReading);
+  }
+  float tempC = ((float)tempReading / denom) * 165 - 40;
+  readings[1].value = 1000 * (tempC * 9) / 5 + 32;
+  readings[1].metricId = "es.mrjon.temperatureFMillis";
+
+  return 2;
 }
 
 // =====================================
@@ -203,7 +249,12 @@ const int RHT_EXPECTED_TRANSITIONS = (8 * RHT_PAYLOAD_SIZE_BYTES) * 2 + 3;
 const int RHT_TIMEOUT_US = 255;
 const int RHT_THRESHOLD_US = 40;
 
-boolean fetchDataRHT03(float* relHumidity, float* tempF, String* errorMessage) {
+int fetchDataRHT03(int maxReadings, struct Reading* readings, String* errorMessage) {
+  if (maxReadings < 2) {
+    Serial.println("readings buffer is not large enough");
+    return 0;
+  }
+
   /**
    ** Signal that we're ready to read data
    **/
@@ -272,7 +323,7 @@ boolean fetchDataRHT03(float* relHumidity, float* tempF, String* errorMessage) {
     Serial.print("Didn't get the right number of points: ");
     Serial.println(actualTransitions);
     *errorMessage = "Didn't get enough bits from sensor.";
-    return false;
+    return 0;
   }
   
   /**
@@ -294,7 +345,7 @@ boolean fetchDataRHT03(float* relHumidity, float* tempF, String* errorMessage) {
   if (expectedSum != payload[4]) {
     Serial.println("Checksum: BAD");
     *errorMessage = "Bad checksum";
-    return false;
+    return 0;
   } else {
     if (debug >= ALL) {
       Serial.println("Checksum: OK");
@@ -303,13 +354,32 @@ boolean fetchDataRHT03(float* relHumidity, float* tempF, String* errorMessage) {
   
   unsigned int h = (payload[0] << 8) + payload[1];
   unsigned int tc = (payload[2] << 8) + payload[3];
+
+
+  readings[0].value = 1000 * (h / 10.0);
+  readings[0].metricId = "es.mrjon.relativeHumidityMillis";
+  readings[1].value = 1000 * ((tc / 10.0) * 9 / 5 + 32);
+  readings[1].metricId = "es.mrjon.temperatureFMillis";
   
-  *relHumidity = h / 10.0;
-  *tempF = (tc / 10.0) * 9 / 5 + 32;
-  
-  return true;
+  return 2;
 }
 
+// =======================================
+// Temperature Sensor Functions: MPL3115A2
+// =======================================
+
+int fetchDataMpl3115a2(int maxReadings, struct Reading* readings) {
+  if (maxReadings < 1) {
+    return 0;
+  }
+
+  float pressurePascals = pressureSensor.readPressure();
+
+  readings[0].value = 1000 * pressurePascals;
+  readings[0].metricId = "es.mrjon.pressureMilliPascals";
+
+  return 1;
+}
 
 // =====================================
 // XBee Functions
@@ -451,7 +521,7 @@ bool xbeeSetup() {
      return false; 
   }
   
-  xbeeSend("ATMY2222\r");
+  xbeeSend("ATMY3333\r");
   if (!xbeeIsOk()) {
     return false; 
   }
