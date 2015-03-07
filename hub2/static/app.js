@@ -1,7 +1,7 @@
 function init() {
   renderTimeseries('es.mrjon.temperatureFMillis', 'temps_div', 'Temperature (F)');
   renderTimeseries('es.mrjon.relativeHumidityMillis', 'humid_div', 'Relative Humidity (%)');
-  renderTimeseries('es.mrjon.pressureMilliPascals', 'pressure_div', 'Pressure (Pa)');
+//  renderTimeseries('es.mrjon.pressureMilliPascals', 'pressure_div', 'Pressure (Pa)');
 }
 
 function renderTimeseries(seriesName, targetDivName, yAxisLabel) {

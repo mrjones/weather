@@ -263,7 +263,7 @@ parseQuery (seriesName, mduration) = do
 
 -- TODO(mrjones): make this configurable
 reporterNames :: Map String String
-reporterNames = fromList [("1", "Living Room"), ("2", "Experimental"), ("3", "Bedroom")]
+reporterNames = fromList [("1", "Living Room"), ("2", "Experimental"), ("3", "Bedroom"), ("153", "Experimental")]
 
 queryPage :: HubConfig -> UTCTime -> ServerPartT IO Response
 queryPage conf startTime = do
