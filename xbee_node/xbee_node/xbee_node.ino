@@ -1,7 +1,8 @@
 enum Sensor {
   S_RHT03,
   S_HIH6130,
-  S_MPL3115A2
+  S_MPL3115A2,
+  S_HTU21D
 };
 
 struct Reading {
@@ -30,9 +31,10 @@ const int XBEE_TX_PIN = 10;  // connected to RX on the XBee
 #include <Wire.h>
 #include <SoftwareSerial.h>
 #include "MPL3115A2.h"
+#include "HTU21D.h"
 
-const int REPORTER_ID = 0x0002;
-const Sensor SENSOR_TYPE = S_MPL3115A2;
+const int REPORTER_ID = 0x0099;
+const Sensor SENSOR_TYPE = S_HTU21D;
 
 
 const int LED_PIN = 13;
@@ -46,6 +48,7 @@ const int debug = SOME;
 SoftwareSerial xbee = SoftwareSerial(XBEE_RX_PIN, XBEE_TX_PIN);
 
 MPL3115A2 pressureSensor;
+HTU21D htu21dSensor;
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
@@ -59,6 +62,9 @@ void setup() {
     pressureSensor.setModeBarometer();
     pressureSensor.setOversampleRate(7); // Set Oversample to the recommended 128
     pressureSensor.enableEventFlags();
+    break;
+  case S_HTU21D:
+    htu21dSensor.begin();
     break;
   case S_HIH6130:
   case S_RHT03:
@@ -99,6 +105,8 @@ void loop() {
   case S_MPL3115A2:
     collected = fetchDataMpl3115a2(2, (struct Reading*)&readings);
     break;
+  case S_HTU21D:
+    collected = fetchDataHtu21d(2, (struct Reading*)&readings);
   }
 
   Serial.print("Collected readings: ");
@@ -379,6 +387,26 @@ int fetchDataMpl3115a2(int maxReadings, struct Reading* readings) {
   readings[0].metricId = "es.mrjon.pressureMilliPascals";
 
   return 1;
+}
+
+// ====================================
+// Temperature Sensor Functions: HTU21D
+// =====================================
+
+int fetchDataHtu21d(int maxReadings, struct Reading* readings) {
+  if (maxReadings < 2) {
+    return 0;
+  }
+
+  float temperatureC = htu21dSensor.readTemperature();
+  float relativeHumidity = htu21dSensor.readHumidity();
+
+  readings[0].value = 1000 * (temperatureC * 9 / 5 + 32);
+  readings[0].metricId = "es.mrjon.temperatureFMillis";
+  readings[1].value = 1000 * relativeHumidity;
+  readings[1].metricId = "es.mrjon.relativeHumidityMillis";
+
+  return 2;
 }
 
 // =====================================
