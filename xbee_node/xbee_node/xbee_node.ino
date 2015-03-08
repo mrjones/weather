@@ -33,8 +33,8 @@ const int XBEE_TX_PIN = 10;  // connected to RX on the XBee
 #include "MPL3115A2.h"
 #include "HTU21D.h"
 
-const int REPORTER_ID = 0x0099;
-const Sensor SENSOR_TYPE = S_HTU21D;
+const int REPORTER_ID = 0x0001;
+const Sensor SENSOR_TYPE = S_HIH6130;
 
 
 const int LED_PIN = 13;
@@ -230,7 +230,7 @@ int fetchDataHIH6130(int maxReadings, struct Reading* readings) {
     Serial.println("Humidity reading: ");
     Serial.println(humidityReading);
   }
-  readings[0].value = 1000 * 100 * (float)humidityReading / denom;
+  readings[0].value = (double)1000 * 100 * ((double)humidityReading / denom);
   readings[0].metricId = "es.mrjon.relativeHumidityMillis";
 
   // Section 5.0 Calculation of Optional Temperature from the Digital Output
@@ -238,8 +238,8 @@ int fetchDataHIH6130(int maxReadings, struct Reading* readings) {
     Serial.println("Temp reading: ");
     Serial.println(tempReading);
   }
-  float tempC = ((float)tempReading / denom) * 165 - 40;
-  readings[1].value = 1000 * (tempC * 9) / 5 + 32;
+  double tempC = ((double)tempReading / denom) * 165 - 40;
+  readings[1].value = 1000 * ((tempC * 9) / 5 + 32);
   readings[1].metricId = "es.mrjon.temperatureFMillis";
 
   return 2;
@@ -549,7 +549,7 @@ bool xbeeSetup() {
      return false; 
   }
   
-  xbeeSend("ATMY2222\r");
+  xbeeSend("ATMY1111\r");
   if (!xbeeIsOk()) {
     return false; 
   }
