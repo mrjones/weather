@@ -306,11 +306,11 @@ dashboardHtml =
     H.body ! A.onload "init()" $ do
       H.div ! A.class_ "grouping" $ do
         H.div ! A.id "temps_summary" ! A.class_ "summary" $ ""
-        H.div ! A.id "temps_chart" $ ""
+        H.table $ H.tr $ H.td $ H.div ! A.id "temps_chart" $ ""
       H.div ! A.class_ "grouping" $ do
         H.div ! A.id "humid_summary" ! A.class_ "summary" $ ""
-        H.div ! A.id "humid_chart" $ ""
+        H.table $ H.tr $ H.td $ H.div ! A.id "humid_chart" $ ""
       H.div ! A.class_ "grouping" $ do
         H.div ! A.id "pressure_summary" ! A.class_ "summary" $ ""
-        H.div ! A.id "pressure_chart" $ ""
+        H.table $ H.tr $ H.td $ H.div ! A.id "pressure_chart" $ ""
       H.div ! A.id "debug" $ ""
