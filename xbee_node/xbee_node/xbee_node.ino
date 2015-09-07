@@ -235,7 +235,7 @@ int fetchDataHIH6130(int maxReadings, struct Reading* readings) {
 
   // Section 5.0 Calculation of Optional Temperature from the Digital Output
   if (debug >= SOME) {
-    Serial.println("Temp reading: ");
+    Serial.println("Temp reading (F): ");
     Serial.println(tempReading);
   }
   double tempC = ((double)tempReading / denom) * 165 - 40;

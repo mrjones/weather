@@ -304,7 +304,13 @@ dashboardHtml =
       H.link ! A.href "http://fonts.googleapis.com/css?family=Roboto" ! A.rel "stylesheet" ! A.type_ "text/css"
       H.link ! A.href "/css/hub.css" ! A.rel "stylesheet" ! A.type_ "text/css"
     H.body ! A.onload "init()" $ do
-      H.div ! A.id "temps_div" $ ""
-      H.div ! A.id "humid_div" $ ""
-      H.div ! A.id "pressure_div" $ ""
+      H.div ! A.class_ "grouping" $ do
+        H.div ! A.id "temps_summary" ! A.class_ "summary" $ ""
+        H.div ! A.id "temps_chart" $ ""
+      H.div ! A.class_ "grouping" $ do
+        H.div ! A.id "humid_summary" ! A.class_ "summary" $ ""
+        H.div ! A.id "humid_chart" $ ""
+      H.div ! A.class_ "grouping" $ do
+        H.div ! A.id "pressure_summary" ! A.class_ "summary" $ ""
+        H.div ! A.id "pressure_chart" $ ""
       H.div ! A.id "debug" $ ""
