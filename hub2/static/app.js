@@ -31,6 +31,16 @@ function colorize(reporterNames) {
     return paletteMap;
 }
 
+function format(value, seriesName) {
+    if (seriesName == "es.mrjon.temperatureFMillis") {
+        return value.toFixed(1) + "&deg;"
+    } else if (seriesName == "es.mrjon.relativeHumidityMillis") {
+        return value.toFixed(0) + "%";
+    } else {
+        return value.toFixed(1);
+    }
+}
+
 function renderTimeseries(seriesName, summaryDivName, chartDivName, yAxisLabel) {
   var jsStart = Date.now();
   var params = window.location.search.replace("\?", "&");
@@ -92,7 +102,8 @@ function renderTimeseries(seriesName, summaryDivName, chartDivName, yAxisLabel) 
               "<div class='stat' style='color: " +
                   colorsByReporterName[reporterName] + "'><div class='label'>" +
                   reporterName + "</div><div class='value'>" +
-                  millisToFloat(latestData.val) + "</div></div>");
+                  format(millisToFloat(latestData.val), seriesName) +
+                  "</div></div>");
       }
 
       var renderHour = function(h) {

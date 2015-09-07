@@ -312,5 +312,5 @@ dashboardHtml =
         H.table $ H.tr $ H.td $ H.div ! A.id "humid_chart" $ ""
       H.div ! A.class_ "grouping" $ do
         H.div ! A.id "pressure_summary" ! A.class_ "summary" $ ""
-        H.table $ H.tr $ H.td $ H.div ! A.id "pressure_chart" $ ""
+        H.div ! A.id "pressure_chart" $ ""
       H.div ! A.id "debug" $ ""
