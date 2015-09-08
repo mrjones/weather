@@ -129,6 +129,7 @@ allPages config = do
   requestStartTime <- liftIO $ getCurrentTime
   msum [ dir "js" $ dir "app.js" $ serveFile (asContentType "text/javascript") (staticFilename config "/app.js")
        , dir "css" $ dir "hub.css" $ serveFile (asContentType "text/css") (staticFilename config "hub.css")
+       , dir "favicon.ico" $ serveFile (asContentType "image/x-icon") (staticFilename config "favicon.ico")
        , dir "report" $ reportPage config
        , dir "query" $ queryPage config requestStartTime
        , dashboardPage
