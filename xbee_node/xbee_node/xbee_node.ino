@@ -33,8 +33,8 @@ const int XBEE_TX_PIN = 10;  // connected to RX on the XBee
 #include "MPL3115A2.h"
 #include "HTU21D.h"
 
-const int REPORTER_ID = 0x0001;
-const Sensor SENSOR_TYPE = S_HIH6130;
+const int REPORTER_ID = 0x0003;
+const Sensor SENSOR_TYPE = S_RHT03;
 
 
 const int LED_PIN = 13;
@@ -77,7 +77,9 @@ void setup() {
   // TODO(mrjones): pick a more thought-out time? 
   delay(5000);
   
-  xbeeSetup();
+  if (!xbeeSetup()) {
+    Serial.println("Error configuring XBee.");
+  }
 }
 
 void blink(int count, int howLongMs) {
@@ -360,8 +362,8 @@ int fetchDataRHT03(int maxReadings, struct Reading* readings, String* errorMessa
     }
   }
   
-  unsigned int h = (payload[0] << 8) + payload[1];
-  unsigned int tc = (payload[2] << 8) + payload[3];
+  unsigned int h = ((unsigned int)payload[0] << 8) + payload[1];
+  unsigned int tc = ((unsigned int)payload[2] << 8) + payload[3];
 
 
   readings[0].value = 1000 * (h / 10.0);
