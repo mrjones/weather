@@ -1,0 +1,35 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: weather-hub
+spec:
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: weather-hub
+    spec:
+      containers:
+      - name: weather-hub
+        image: gcr.io/mrjones-gke/weather-hub:v0.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: MYSQL_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: weather-sql
+              key: user
+        - name: MYSQL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: weather-sql
+              key: password
+        - name: MYSQL_HOST
+          valueFrom:
+            secretKeyRef:
+              name: weather-sql
+              key: host
+        # https://github.com/kubernetes/kubernetes/wiki/User-FAQ#use-of-environment-variables-on-the-command-line
+        # https://github.com/kubernetes/kubernetes/issues/386
+        command: ["sh", "-c", "/deploy/bin/hub --port=5999 --staticdir=/deploy/static --dbhost=$MYSQL_HOST --dbpass=$MYSQL_PASSWORD --dbuser=$MYSQL_USERNAME"]
+

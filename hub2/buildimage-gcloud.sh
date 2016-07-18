@@ -1,0 +1,31 @@
+usage="$0 [tag]"
+project="mrjones/weather"
+
+if [ -z $1 ]
+then
+    echo "Please supply a tag for this image"
+    echo $usage
+    exit 1
+fi
+tag=$1
+
+push="false"
+if [[ $2 == "push" ]]
+then
+    push="true"
+fi
+
+echo "=== Compiling binary"
+cabal install
+
+echo "=== Creating image"
+sudo docker build -t $project .
+docker tag $project gcr.io/mrjones-gke/weather-hub:${tag}
+
+if [[ $push == "true" ]]
+then
+    echo "=== Pushing to docker hub"
+    gcloud docker push gcr.io/mrjones-gke/weather-hub:${tag}
+else 
+    echo "=== Skipping push to docker hub"
+fi
